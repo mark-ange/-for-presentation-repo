@@ -1,0 +1,98 @@
+# CityCare CDO
+
+CityCare CDO is a Vue 3 admin portal backed by an Express API and MongoDB.
+
+## Data ownership
+
+Operational records (reports, fleet vehicles, barangays, and collection schedules), administrator profile details, and administrative preferences are served and persisted by the backend. The frontend reads and writes these records through `/api`; it does not contain operational sample records. Analytics are calculated from stored reports, and response-time reporting starts once a report has an assignment timestamp.
+
+The browser keeps only interface preferences such as the selected theme and the authentication token needed for API requests. User profile details and admin preferences are loaded from the API.
+
+## Run locally
+
+1. Configure a reachable MongoDB URI. For this local setup, the backend reads `MONGODB_URI` from the MongoDB Atlas-generated `backend/atlas-credentials.env` file (gitignored); it can also use `MONGO_URI` from the process environment. Set production secrets through the hosting provider's secret settings rather than committing credentials.
+2. Start the API from the repository root:
+
+   ```powershell
+   npm --prefix backend run dev
+   ```
+
+3. Start the Vue development server in another terminal:
+
+   ```powershell
+   npm run dev
+   ```
+
+The development server proxies `/api` to `http://localhost:5000`. MongoDB must be available for records and preferences to persist.
+
+For local development, if JWT/session secrets are not provided through the process environment, the backend creates and reuses private random secrets in the gitignored `backend/config/developmentSecrets.json` file. Keep that file on this computer; deleting it or changing the environment secrets invalidates existing login tokens, so sign in again. Production deployments must provide strong `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `SESSION_SECRET` values through the hosting provider's secret settings; the local development-secrets file is never used in production.
+
+The Firebase Admin service-account key is optional for local runs. Without `backend/config/serviceAccountKey.json`, backend-only Firebase features such as Firebase ID-token verification and push notifications are unavailable; MongoDB-backed admin functions can still run. Keep any service-account key private and out of version control.
+
+If Node.js cannot resolve Atlas SRV records through the system DNS resolver, set `MONGO_DNS_SERVERS` to a reachable DNS server before starting the backend. For example, in PowerShell:
+
+```powershell
+$env:MONGO_DNS_SERVERS = '192.168.0.1'
+npm --prefix backend run dev
+```
+
+Replace the example DNS address with a resolver available on your network. The backend uses `citycare_db` by default; set `MONGO_DATABASE` to choose a different database name.
+
+The Firebase web app configuration is included in `src/firebase.js`, so running the frontend does not require a `.env` file. Firebase web configuration is visible to browser users; protect Firebase services with Authentication, Firestore, and Storage rules, and restrict the API key in Google Cloud. Backend Firebase Admin features are optional and require a private service account key at `backend/config/serviceAccountKey.json`.
+
+## Citizen mobile app and live reports
+
+The admin incident table polls the backend every five seconds. Reports are stored in MongoDB, and the admin can inspect evidence, assign a fleet unit, and update a report through the protected status API. The reports API uses database pagination; `GET /api/reports` returns up to 1,000 newest reports by default, and accepts `page` and `limit` parameters (maximum page size: 1,000). Its response includes `count` for the current page, `total`, `totalPages`, `statusCounts`, and `data`.
+
+Citizen submissions can use `POST /api/reports` with JSON fields such as `title`, `category`, `barangay`, `purokZone`, `landmark`, `description`, `gpsCoordinates`, `reporter`, and `userEmail`. Mobile clients can include a JPEG, PNG, or WebP image as base64 in `photoBase64` (maximum decoded size: 4 MB); the API stores it with the report in MongoDB. The admin report table omits image data to keep list responses small and fetches the image when an administrator opens the report. External HTTPS image URLs are also accepted as `photoUrl` (or `imageUrl` / `photoEvidenceUrl`).
+
+Stored evidence is part of the MongoDB report document and has no inactivity-based expiry or TTL policy; logging out of the admin or leaving a report unopened does not remove it. It remains available while the report/database is retained. Keep Atlas backups and the account active for long-term retention; no application can guarantee five-year availability if its database is deleted, the Atlas account is closed, or records are manually removed. The configured Firebase Storage bucket is currently unavailable, so uploads use MongoDB rather than relying on Storage. A report marked as having media but with no uploaded image is shown as missing evidence; if the resident still has its locally saved image, opening the resident app online retries the upload and can repair the existing report.
+
+### GIS map, GPS, and closest-truck dispatch
+
+The Fleet page uses Leaflet with OpenStreetMap tiles and plots report locations and trucks from the API. Nearby and coincident pins are grouped into numbered clusters; click a cluster to zoom in, and exact overlaps spiderfy at maximum zoom so each saved marker remains selectable without changing its geographic coordinates or deleting a record. Markers are anchored to geographic coordinates, not the screen, so they move across the viewport as the map is panned while remaining at the same map location. Periodic API refreshes update existing marker instances rather than recreating them. Report submissions remain compatible with the mobile app's `gpsCoordinates` string and may also send numeric `latitude`/`longitude` or GeoJSON `location: { "type": "Point", "coordinates": [longitude, latitude] }`. The backend stores valid points as GeoJSON and retains `gpsCoordinates` for older clients. Report markers are colored by status; select one and choose **Find closest truck** to see the nearest non-maintenance trucks, their spherical distance, and a straight-line connection. **Assign this truck** updates the report's status, assigned unit, and driver/personnel.
+
+`GET /api/fleet/closest?reportId=<report-id>` finds trucks for a report. It also accepts `?latitude=<lat>&longitude=<lng>` or `?gpsCoordinates=<lat>,<lng>`. `PUT /api/fleet/:id/location` accepts the same coordinate formats and requires an authenticated administrator token. Until a truck sends actual GPS, its map pin uses an explicitly labeled approximate barangay-center coordinate. Current seeded/sample points for Carmen, Lapasan, Macasandig, Balulang, Lumbia, Bulua, Nazareth, Kauswagan, and the central depot are estimates—not verified live truck positions. The Fleet page refreshes positions and reports every 15 seconds. OpenStreetMap tiles require internet access and are shown with attribution.
+
+Example GPS update from an authorized administrator/device:
+
+```http
+PUT /api/fleet/TRK-042/location
+Authorization: Bearer <administrator-token>
+Content-Type: application/json
+
+{"latitude":8.4822,"longitude":124.6175}
+```
+
+Driver accounts/device credentials are not configured in this project yet, so resident app tokens cannot update truck locations. Keep the endpoint restricted to administrator-authenticated callers until a driver/device authentication flow is added.
+
+To run the focused coordinate and closest-truck API tests from the repository root, use `npm --prefix backend run test:coordinates`. Do not run `npm --prefix backend run seed` against an existing database to update map pins: the seeder clears collections before inserting sample data.
+
+### Local access from phones on the same Wi-Fi
+
+You do not need Render for local use. Run the backend on the computer and point the Android app at that computer's private LAN address:
+
+1. Start the API from the repository root with `npm --prefix backend start` (or, from the `backend` folder, `npm start`). Keep the terminal open.
+2. On Windows, run `ipconfig` and find the IPv4 address for the Wi-Fi adapter connected to the same network as the phone (for example, `192.168.1.50`).
+3. In the separate Android project, set `CityCareApiService.kt`'s base URL to `http://<COMPUTER_IP>:5000/api/`. For an Android emulator on this computer, use `http://10.0.2.2:5000/api/`.
+4. Allow Node.js or inbound TCP port 5000 on the Windows Firewall for **Private networks**. Do not expose this development HTTP server to the public internet.
+5. Connect the phone and computer to the same Wi-Fi, then open `http://<COMPUTER_IP>:5000/api/health` in the phone browser. Continue when it returns `ONLINE` and `CONNECTED`.
+6. Build/install the Android app with the updated URL. Submit a test report and check the admin portal's **Incidents** page. Keep the computer awake and the backend running while reports need to be received.
+
+The Vue development server is configured to listen on the LAN as well. To open the admin portal from another device on the same Wi-Fi, run `npm run dev -- --host 0.0.0.0`, then visit `http://<COMPUTER_IP>:5173/`. API calls from this portal are proxied to the backend on the same computer.
+
+### Optional public HTTPS deployment (Render)
+
+If phones must submit from different networks or locations, deploy the API and admin site to public hosting with HTTPS. A Render Blueprint is included in `render.yaml`:
+
+1. Push this project to a GitHub repository and create a Render account.
+2. In Render, choose **New → Blueprint**, connect that repository, and deploy `render.yaml`. It creates `citycare-cdo-api` and `citycare-cdo-admin`; the browser admin is built with the API's public HTTPS address.
+3. Before the API can become healthy, set its `MONGO_URI` environment variable in Render to the MongoDB Atlas connection string. Keep the database username/password private. Add the Render service's outbound IP addresses shown in its settings to the Atlas Network Access allowlist. If the selected Render plan has no stable outbound IPs, contact the host or use a private network/static-egress option rather than exposing Atlas broadly.
+4. If the admin site's Render hostname is not `citycare-cdo-admin.onrender.com`, update the API's `ALLOWED_ORIGINS` value to the exact HTTPS admin-site origin, with no trailing slash.
+5. Wait for both deployments to finish. Check `https://<API_HOST>/api/health`; it must return `ONLINE` and `CONNECTED`. Open the admin site and submit a report from the mobile app to verify end-to-end delivery.
+6. In the separate Android project (not included here), set `CityCareApiService.kt`'s base URL to `https://<API_HOST>/api/` and build/release a new app version. An emulator should use this same public HTTPS URL once deployed; `10.0.2.2` is only for a local emulator/backend setup.
+7. The mobile app can submit its compressed photo in `photoBase64`; alternatively, upload photos to Firebase Storage or another image host and send the HTTPS download URL as `photoUrl`.
+
+Render may sleep free web-service instances when idle, causing a delay on the first request; use an always-on plan for time-sensitive operations. The included rate limits are per source IP: by default, 1,500 submissions/hour and 10,000 API requests/hour. Many mobile carriers and offices share public IPs, so adjust those values to match expected traffic. These in-memory limits suit a single API instance; use a shared rate-limit store before running multiple instances.
+
+Each report receives a unique ID based on its MongoDB document ID. Reports are paginated for the admin UI, which can browse more than 1,000 stored reports without downloading the whole collection each refresh.
