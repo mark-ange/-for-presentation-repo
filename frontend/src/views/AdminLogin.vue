@@ -73,6 +73,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { authApi, getAuthToken } from '../services/api'
+import { getPreferredLandingPath } from '../services/settingsStore'
 
 const router = useRouter()
 
@@ -101,7 +102,7 @@ async function login() {
       password: cleanPass,
       securityPin: cleanPin
     })
-    router.push('/dashboard')
+    router.push(await getPreferredLandingPath(true))
   } catch (err) {
     errorMessage.value = err.message || 'Authentication failed. Please verify credentials.'
   } finally {
@@ -112,7 +113,7 @@ async function login() {
 onMounted(() => {
   document.documentElement.setAttribute('data-theme', theme.value)
   if (getAuthToken()) {
-    router.push('/dashboard')
+    getPreferredLandingPath(true).then(path => router.push(path))
   }
 })
 </script>

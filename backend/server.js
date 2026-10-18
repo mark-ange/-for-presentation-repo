@@ -3,12 +3,23 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 dotenv.config();
+
+if (!process.env.MONGO_URI && process.env.MONGODB_URI) {
+  process.env.MONGO_URI = process.env.MONGODB_URI;
+}
+if (!process.env.MONGO_URI && process.env.MONGO_URI_DIRECT) {
+  process.env.MONGO_URI = process.env.MONGO_URI_DIRECT;
+}
+
 if (!process.env.MONGO_URI) {
   const atlasCredentials = dotenv.config({
     path: path.join(__dirname, 'atlas-credentials.env')
   });
   if (atlasCredentials.parsed?.MONGODB_URI) {
     process.env.MONGO_URI = atlasCredentials.parsed.MONGODB_URI;
+  }
+  if (!process.env.MONGO_URI && atlasCredentials.parsed?.MONGO_URI) {
+    process.env.MONGO_URI = atlasCredentials.parsed.MONGO_URI;
   }
 }
 
@@ -19,8 +30,6 @@ if (process.env.NODE_ENV !== 'production') {
 const session = require('express-session');
 const mongoose = require('mongoose');
 const connectDB = require('./config/db');
-const Report = require('./models/Report');
-const seedData = require('./seeder');
 const {
   setSecurityHeaders,
   authLimiter,
@@ -89,6 +98,7 @@ if (!envValidation.valid && process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
+// Enable this only when the API is reached through its configured reverse proxy.
 if (process.env.TRUST_PROXY === '1') {
   app.set('trust proxy', 1);
 }
@@ -142,6 +152,9 @@ app.options('*', cors(corsOptions));
 // Disable X-Powered-By header
 app.disable('x-powered-by');
 
+// Public Android installer download (configured only on the local development server).
+app.use('/download', require('./routes/downloadRoutes'));
+
 // Health Check API
 app.get('/api/health', (req, res) => {
   const databaseConnected = mongoose.connection.readyState === 1;
@@ -155,9 +168,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api', (req, res, next) => {
   if (mongoose.connection.readyState !== 1) {
-    if (req.method === 'GET' && ['/reports', '/fleet', '/fleet/closest'].includes(req.path)) {
-      return next();
-    }
+    if (req.method === 'GET' && ['/fleet', '/fleet/closest'].includes(req.path)) return next();
     return res.status(503).json({
       success: false,
       message: 'Database is unavailable. API data is not served or accepted until MongoDB reconnects.'
@@ -172,6 +183,7 @@ app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/barangays', require('./routes/barangayRoutes'));
 app.use('/api/fleet', require('./routes/fleetRoutes'));
 app.use('/api/schedules', require('./routes/scheduleRoutes'));
+app.use('/api/content', require('./routes/contentRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
@@ -185,27 +197,6 @@ const PORT = process.env.PORT || 5000;
 
 // Start server - MongoDB connection is non-blocking
 const startServer = async () => {
-  // Try to connect to MongoDB (but don't block server startup)
-  connectDB().then(async (db) => {
-    if (db) {
-      console.log('✅ MongoDB Connected successfully');
-      try {
-        const reportsCount = await Report.countDocuments();
-        if (reportsCount === 0) {
-          console.log('🌱 Database is empty. Auto-seeding initial CityCare CDO records...');
-          await seedData(false);
-        }
-      } catch (err) {
-        console.log('Auto-seed check note:', err.message);
-      }
-    } else {
-      console.error('⚠️  MongoDB connection failed. API requests will return HTTP 503 until MongoDB reconnects.');
-    }
-  }).catch((err) => {
-    console.log('⚠️  MongoDB connection error:', err.message);
-    console.error('API requests will return HTTP 503 until MongoDB reconnects.');
-  });
-
   // Start the API listener while the database connects; database-dependent API calls remain unavailable.
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`====================================================`);
@@ -213,6 +204,26 @@ const startServer = async () => {
     console.log(`📡 Local Web Portal endpoint: http://localhost:${PORT}`);
     console.log(`📱 Android Emulator endpoint: http://10.0.2.2:${PORT}`);
     console.log(`====================================================`);
+
+    connectDB().then((db) => {
+      if (db) {
+        console.log('✅ MongoDB Connected successfully');
+      } else {
+        console.error('⚠️  MongoDB connection failed. API requests will return HTTP 503 until MongoDB reconnects.');
+      }
+    }).catch((err) => {
+      console.error('⚠️ MongoDB connection error:', err.message);
+      console.error('API requests will return HTTP 503 until MongoDB reconnects.');
+    });
+  });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Stop the existing CityCare API process or set PORT to another port.`);
+    } else {
+      console.error('CityCare API failed to start:', error);
+    }
+    process.exit(1);
   });
 
   // Handle graceful shutdown

@@ -63,6 +63,15 @@
             </svg>
             <span>Reports</span>
           </router-link>
+
+          <router-link to="/content" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              <path d="M8 7h8M8 11h8"/>
+            </svg>
+            <span>Community Content</span>
+          </router-link>
           
           <router-link to="/settings" class="nav-item" active-class="active">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
@@ -133,13 +142,21 @@
         </div>
       </main>
     </div>
+    <div v-if="adminAlert" class="admin-alert" role="status" aria-live="polite">
+      <div>
+        <strong>{{ adminAlert.title }}</strong>
+        <p>{{ adminAlert.body }}</p>
+      </div>
+      <button type="button" aria-label="Dismiss alert" @click="adminAlert = null">×</button>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authApi, dashboardApi, getAuthToken, getAuthTokenExpiration } from './services/api'
+import { authApi, dashboardApi, getAuthToken, getAuthTokenExpiration, reportsApi } from './services/api'
+import { adminAlert, loadSettings, publishAdminAlert, settingsState } from './services/settingsStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -150,6 +167,8 @@ const pendingCount = ref(0)
 const currentTime = ref('')
 let clockTimer = null
 let pollTimer = null
+let previousReportStatuses = null
+let backgroundTaskRunning = false
 
 // Theme management
 const theme = ref(localStorage.getItem('theme') || 'dark')
@@ -186,12 +205,11 @@ async function loadAdminProfile() {
 
 watch(() => route.path, () => {
   if (getAuthToken()) {
-    loadAdminProfile()
-    fetchStats()
-    if (!pollTimer) pollTimer = setInterval(fetchStats, 10000)
+    void initializeAdminSession()
   } else if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+    previousReportStatuses = null
   }
 })
 
@@ -217,9 +235,77 @@ async function fetchStats() {
   try {
     const response = await dashboardApi.getStats()
     pendingCount.value = response.data.pending
+    if (settingsState.system.autoRefresh) {
+      processReportNotifications(response.data.reportChanges || [])
+    }
   } catch (err) {
     console.error('Failed to refresh pending report count:', err)
   }
+}
+
+function processReportNotifications(reports) {
+  const enabled = settingsState.notifications
+  if (!enabled.newReports && !enabled.dispatch && !enabled.resolution) {
+    previousReportStatuses = null
+    return
+  }
+
+  const currentStatuses = new Map(reports.map(report => [
+    report.reportId || report.id || report._id,
+    String(report.status || '').toUpperCase().replace(/[\s-]+/g, '_')
+  ]).filter(([id]) => id))
+
+  if (previousReportStatuses) {
+    for (const report of reports) {
+      const id = report.reportId || report.id || report._id
+      const status = String(report.status || '').toUpperCase().replace(/[\s-]+/g, '_')
+      const previousStatus = previousReportStatuses.get(id)
+      const location = report.barangay ? `Brgy. ${report.barangay}` : 'a covered barangay'
+      if (previousStatus === undefined && enabled.newReports) {
+        publishAdminAlert('New incident report', `${report.reportId || 'A report'} was submitted from ${location}.`)
+      } else if (previousStatus !== status && enabled.dispatch &&
+        ['ASSIGNED', 'IN_PROGRESS'].includes(status)) {
+        publishAdminAlert('Dispatch status updated', `${report.reportId || 'A report'} is now ${status.replace('_', ' ').toLowerCase()}.`)
+      } else if (previousStatus !== status && enabled.resolution && status === 'RESOLVED') {
+        publishAdminAlert('Incident resolved', `${report.reportId || 'A report'} from ${location} was marked resolved.`)
+      }
+    }
+  }
+  previousReportStatuses = currentStatuses
+}
+
+async function pollReportNotifications() {
+  const enabled = settingsState.notifications
+  if (!enabled.newReports && !enabled.dispatch && !enabled.resolution) {
+    previousReportStatuses = null
+    return
+  }
+
+  try {
+    const response = await reportsApi.getAll({ page: 1, limit: 1000 })
+    processReportNotifications(response.data || [])
+  } catch (err) {
+    console.error('Failed to check report notifications:', err)
+  }
+}
+
+async function runBackgroundTasks(initialLoad = false) {
+  if (backgroundTaskRunning) return
+  backgroundTaskRunning = true
+  try {
+    if (initialLoad || settingsState.system.autoRefresh) await fetchStats()
+    if (!settingsState.system.autoRefresh) await pollReportNotifications()
+  } finally {
+    backgroundTaskRunning = false
+  }
+}
+
+async function initializeAdminSession() {
+  await Promise.all([loadAdminProfile(), loadSettings(true).catch(err => {
+    console.error('Failed to load administrator preferences:', err)
+  })])
+  await runBackgroundTasks(true)
+  if (!pollTimer) pollTimer = setInterval(() => { void runBackgroundTasks() }, 10000)
 }
 
 function handleSearch() {
@@ -263,9 +349,7 @@ onMounted(() => {
   clockTimer = setInterval(updateClock, 1000)
 
   if (getAuthToken()) {
-    loadAdminProfile()
-    fetchStats()
-    pollTimer = setInterval(fetchStats, 10000)
+    void initializeAdminSession()
   }
   
   // Start token expiration check
@@ -280,6 +364,10 @@ onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
   if (tokenCheckInterval) clearInterval(tokenCheckInterval)
 })
+
+const handleProfileUpdated = () => { void loadAdminProfile() }
+window.addEventListener('admin-profile-updated', handleProfileUpdated)
+onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProfileUpdated))
 </script>
 
 <style scoped>
@@ -288,6 +376,37 @@ onUnmounted(() => {
   height: 100vh;
   overflow: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.admin-alert {
+  position: fixed;
+  z-index: 3000;
+  right: 24px;
+  top: 76px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  box-shadow: var(--shadow-lg);
+}
+
+.admin-alert p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-alert button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
 }
 
 .login-container {
@@ -460,6 +579,7 @@ onUnmounted(() => {
 /* Main */
 .main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -581,8 +701,78 @@ onUnmounted(() => {
 
 .content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 20px;
   background: var(--bg-app);
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 200px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    width: 64px;
+  }
+
+  .sidebar-header {
+    justify-content: center;
+    padding: 14px 8px;
+  }
+
+  .brand,
+  .user-info {
+    display: none;
+  }
+
+  .nav-item {
+    position: relative;
+    justify-content: center;
+    padding: 12px 8px;
+  }
+
+  .nav-item > span:not(.badge) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+  }
+
+  .sidebar-footer {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 4px;
+  }
+
+  .user {
+    justify-content: center;
+  }
+
+  .header {
+    padding: 0 12px;
+  }
+
+  .search {
+    width: min(320px, 52vw);
+  }
+
+  .content {
+    padding: 12px;
+  }
 }
 </style>

@@ -18,6 +18,11 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     default: ''
   },
+  facebookId: {
+    type: String,
+    sparse: true,
+    unique: true
+  },
   barangay: {
     type: String,
     default: 'Carmen'

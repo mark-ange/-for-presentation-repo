@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const { body } = require('express-validator');
 const Fleet = require('../models/Fleet');
+const FLEET_STATUSES = Fleet.schema.path('status').enumValues;
 const memoryStore = require('../config/memoryStore');
 const { apiLimiter, sanitizeMongoDB, validateInput } = require('../middleware/securityMiddleware');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
@@ -63,9 +64,10 @@ router.get('/', async (req, res) => {
       trucks = memoryStore.fleet;
     }
 
-    const inTransit = trucks.filter(t => t.status === 'In Transit').length;
+    const inTransit = trucks.filter(t => ['Dispatching', 'In Transit'].includes(t.status)).length;
     const idle = trucks.filter(t => t.status === 'Idle').length;
     const maintenance = trucks.filter(t => t.status === 'Maintenance').length;
+    const outOfService = trucks.filter(t => t.status === 'Out of Service').length;
 
     const formattedTrucks = trucks.map(formatTruck);
 
@@ -75,6 +77,7 @@ router.get('/', async (req, res) => {
         inTransit,
         idle,
         maintenance,
+        outOfService,
         total: trucks.length
       },
       data: formattedTrucks
@@ -116,13 +119,13 @@ router.get('/closest', async (req, res) => {
             key: 'location',
             distanceField: 'distanceMeters',
             spherical: true,
-            query: { status: { $ne: 'Maintenance' } }
+            query: { status: { $nin: ['Maintenance', 'Out of Service'] } }
           }
         },
         { $limit: 100 }
       ]);
       const unlocated = await Fleet.find({
-        status: { $ne: 'Maintenance' },
+        status: { $nin: ['Maintenance', 'Out of Service'] },
         $or: [{ location: { $exists: false } }, { location: null }]
       }).lean();
 
@@ -137,7 +140,7 @@ router.get('/closest', async (req, res) => {
       ];
     } else {
       trucks = memoryStore.fleet
-        .filter(truck => truck.status !== 'Maintenance')
+        .filter(truck => !['Maintenance', 'Out of Service'].includes(truck.status))
         .map(truck => {
           const { location } = truckLocation(truck);
           return location
@@ -225,7 +228,8 @@ router.post('/',
     body('plate').notEmpty().isString().trim().escape().withMessage('License plate is required'),
     body('driver').notEmpty().isString().trim().escape().withMessage('Driver name is required'),
     body('barangay').optional().isString().trim().escape(),
-    body('status').optional().isString().trim().escape(),
+    body('status').optional().isString().trim().isIn(FLEET_STATUSES)
+      .withMessage(`Status must be one of: ${FLEET_STATUSES.join(', ')}`),
     body('truckId').optional().isString().trim().escape(),
     body('position').optional().isObject()
   ]),
@@ -286,7 +290,8 @@ router.put('/:id',
   apiLimiter,
   sanitizeMongoDB,
   validateInput([
-    body('status').optional().isString().trim().escape(),
+    body('status').optional().isString().trim().isIn(FLEET_STATUSES)
+      .withMessage(`Status must be one of: ${FLEET_STATUSES.join(', ')}`),
     body('driver').optional().isString().trim().escape(),
     body('barangay').optional().isString().trim().escape(),
     body('plate').optional().isString().trim().escape(),

@@ -8,20 +8,25 @@
         <p v-if="errorMessage" class="text-red" role="alert">{{ errorMessage }}</p>
       </div>
 
-      <button type="button" class="btn btn-primary" @click="openAddForm">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        <span>Add Vehicle</span>
-      </button>
+      <div class="header-actions">
+        <button type="button" class="btn btn-secondary" :disabled="isRefreshing" @click="manualRefresh">
+          {{ isRefreshing ? 'Refreshing...' : 'Refresh Fleet' }}
+        </button>
+        <button type="button" class="btn btn-primary" @click="openAddForm">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span>Add Vehicle</span>
+        </button>
+      </div>
     </div>
 
     <!-- Status Cards -->
     <div class="status-grid">
       <div class="status-card transit-state">
         <div class="status-header">
-          <span class="status-label">IN TRANSIT</span>
+          <span class="status-label">DISPATCHING / IN TRANSIT</span>
           <div class="status-dot green"></div>
         </div>
         <div class="status-val text-green">{{ fleetStats.inTransit }}</div>
@@ -45,28 +50,67 @@
         <div class="status-val text-red">{{ fleetStats.maintenance }}</div>
         <span class="status-sub">Scheduled repair in depot</span>
       </div>
+
+      <div class="status-card out-of-service-state">
+        <div class="status-header">
+          <span class="status-label">OUT OF SERVICE</span>
+          <div class="status-dot gray"></div>
+        </div>
+        <div class="status-val">{{ fleetStats.outOfService }}</div>
+        <span class="status-sub">Unavailable for assignment</span>
+      </div>
     </div>
 
     <!-- City Sector Map Section -->
-    <div class="map-card">
+    <div ref="mapCardContainer" class="map-card">
       <div class="map-header">
         <div>
           <h2 class="panel-title">Live Fleet & Incident Map</h2>
           <span class="panel-subtitle">OpenStreetMap • Refreshes every 15 seconds</span>
         </div>
 
-        <div class="map-legend">
-          <span class="legend-item"><span class="dot green"></span> In transit</span>
-          <span class="legend-item"><span class="dot yellow"></span> Idle</span>
-          <span class="legend-item"><span class="dot red"></span> Maintenance</span>
-          <span class="legend-item"><span class="dot report-dot"></span> Reports</span>
+        <div class="map-header-actions">
+          <div class="map-legend">
+            <span class="legend-item"><span class="dot dispatching"></span> Dispatching</span>
+            <span class="legend-item"><span class="dot green"></span> In transit</span>
+            <span class="legend-item"><span class="dot yellow"></span> Idle</span>
+            <span class="legend-item"><span class="dot red"></span> Maintenance</span>
+            <span class="legend-item"><span class="dot out-of-service"></span> Out of service</span>
+            <span class="legend-item"><span class="dot report-dot"></span> Reports</span>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" @click="toggleMapFullscreen">
+            {{ isMapFullscreen ? 'Exit full screen' : 'Full screen' }}
+          </button>
         </div>
       </div>
 
-      <div ref="mapContainer" class="map-viewport" aria-label="Cagayan de Oro fleet and incident map"></div>
+      <div ref="mapContainer" class="map-viewport" aria-label="Cagayan de Oro fleet and incident map">
+        <div class="map-controls" aria-label="Map controls">
+          <button type="button" title="Zoom in" aria-label="Zoom in" :disabled="mapZoom >= 19" @click.stop="zoomMap(1)">+</button>
+          <input
+            class="map-zoom-slider"
+            type="range"
+            min="3"
+            max="19"
+            :value="mapZoom"
+            aria-label="Map zoom level"
+            title="Adjust map zoom"
+            @input.stop="setMapZoom(Number($event.target.value))"
+          />
+          <span class="map-zoom-level" aria-live="polite">z{{ mapZoom }}</span>
+          <button type="button" title="Zoom out" aria-label="Zoom out" :disabled="mapZoom <= 3" @click.stop="zoomMap(-1)">−</button>
+          <button type="button" class="map-center-button" title="Center on Cagayan de Oro" aria-label="Center map on Cagayan de Oro" @click.stop="resetMapView">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="8"/>
+              <circle cx="12" cy="12" r="2"/>
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
 
       <p class="map-note">
-        Nearby pins are grouped when they overlap; click a group to zoom in and reveal individual pins, including exact overlaps. Grouping does not change or remove their saved locations. Pins remain anchored to map coordinates. Truck pins use approximate barangay centers until live GPS is provided. Select a report pin to find the nearest available truck.
+        Trucks stay individually visible above the map; incident reports cluster when nearby. Click a truck to inspect it or a report cluster to explore reports. Drag the zoom slider or use + / − for precise control.
       </p>
 
       <div v-if="selectedReport && closestTruck" class="closest-truck-panel">
@@ -109,7 +153,32 @@
           </div>
           <div class="inspector-item">
             <span class="item-label">Operational Status</span>
-            <strong class="item-val font-mono">{{ selectedTruck.status }}</strong>
+            <div class="status-control" @click.stop>
+              <select
+                class="status-select inspector-status-select"
+                :value="pendingTruckStatuses[selectedTruck.id] || selectedTruck.status"
+                :disabled="isStatusSaving(selectedTruck.id)"
+                :aria-label="`Status for ${selectedTruck.id}`"
+                @change="setPendingTruckStatus(selectedTruck, $event.target.value)"
+              >
+                <option v-for="status in fleetStatuses" :key="status" :value="status">{{ status }}</option>
+              </select>
+              <button
+                v-if="pendingTruckStatuses[selectedTruck.id]"
+                type="button"
+                class="btn btn-primary btn-sm"
+                :disabled="isStatusSaving(selectedTruck.id)"
+                @click="saveTruckStatus(selectedTruck)"
+              >
+                {{ isStatusSaving(selectedTruck.id) ? 'Saving…' : 'Update status' }}
+              </button>
+              <span
+                v-if="truckStatusFeedback[selectedTruck.id]"
+                class="status-feedback"
+                :class="truckStatusFeedback[selectedTruck.id].type"
+                role="status"
+              >{{ truckStatusFeedback[selectedTruck.id].message }}</span>
+            </div>
           </div>
           <div class="inspector-item">
             <span class="item-label">Location source</span>
@@ -118,9 +187,7 @@
         </div>
 
         <div class="inspector-footer">
-          <button class="btn btn-secondary btn-sm" @click="changeVehicleStatus">
-            Cycle Status ({{ selectedTruck.status }})
-          </button>
+          <span class="panel-subtitle">Choose a status and click Update to save.</span>
         </div>
       </div>
     </div>
@@ -177,9 +244,33 @@
               </div>
             </td>
             <td>
-              <span class="status-badge" :class="statusClass(truck.status)">
-                {{ truck.status }}
-              </span>
+              <div class="status-control" @click.stop>
+                <select
+                  class="status-badge status-select"
+                  :class="statusClass(pendingTruckStatuses[truck.id] || truck.status)"
+                  :value="pendingTruckStatuses[truck.id] || truck.status"
+                  :disabled="isStatusSaving(truck.id)"
+                  :aria-label="`Status for ${truck.id}`"
+                  @change="setPendingTruckStatus(truck, $event.target.value)"
+                >
+                  <option v-for="status in fleetStatuses" :key="status" :value="status">{{ status }}</option>
+                </select>
+                <button
+                  v-if="pendingTruckStatuses[truck.id]"
+                  type="button"
+                  class="btn btn-primary btn-sm status-update-button"
+                  :disabled="isStatusSaving(truck.id)"
+                  @click="saveTruckStatus(truck)"
+                >
+                  {{ isStatusSaving(truck.id) ? 'Saving…' : 'Update' }}
+                </button>
+                <span
+                  v-if="truckStatusFeedback[truck.id]"
+                  class="status-feedback"
+                  :class="truckStatusFeedback[truck.id].type"
+                  role="status"
+                >{{ truckStatusFeedback[truck.id].message }}</span>
+              </div>
             </td>
             <td class="text-right" @click.stop>
               <button class="action-btn" @click="selectTruck(truck)">
@@ -232,9 +323,7 @@
           <div class="form-item">
             <label>Initial Status</label>
             <select v-model="newTruck.status" class="form-input select-input">
-              <option>In Transit</option>
-              <option>Idle</option>
-              <option>Maintenance</option>
+              <option v-for="status in fleetStatuses" :key="status" :value="status">{{ status }}</option>
             </select>
           </div>
 
@@ -249,7 +338,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
@@ -257,6 +346,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { barangayApi, fleetApi, reportsApi } from '../services/api'
 import { useRouter } from 'vue-router'
+import { loadSettings, settingsState } from '../services/settingsStore'
 
 const router = useRouter()
 const search = ref('')
@@ -265,8 +355,17 @@ const selectedReport = ref(null)
 const closestTruck = ref(null)
 const assigningTruck = ref(false)
 const showAddForm = ref(false)
+const isRefreshing = ref(false)
+const mapCardContainer = ref(null)
 const mapContainer = ref(null)
 const mapInstance = ref(null)
+const isMapFullscreen = ref(false)
+const mapZoom = ref(12)
+const defaultMapCenter = [8.48, 124.64]
+const fleetStatuses = ['Idle', 'Dispatching', 'In Transit', 'Maintenance', 'Out of Service']
+const statusSavingIds = ref([])
+const pendingTruckStatuses = ref({})
+const truckStatusFeedback = ref({})
 
 const newTruck = ref({
   id: '',
@@ -281,8 +380,11 @@ const barangays = ref([])
 const reports = ref([])
 const errorMessage = ref('')
 let markerClusterLayer
+let truckLayer
 let routeLayer
 let refreshTimer
+let mapWheelDelta = 0
+let mapWheelTimer
 const truckMarkers = new Map()
 const reportMarkers = new Map()
 
@@ -324,6 +426,15 @@ function markerIcon(className, html) {
     html,
     iconSize: [30, 34],
     iconAnchor: [15, 17]
+  })
+}
+
+function truckMarkerIcon(status) {
+  return L.divIcon({
+    className: 'truck-marker-wrapper',
+    html: `<span class="truck-marker ${status}" aria-label="Truck">🚛</span>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21]
   })
 }
 
@@ -380,7 +491,7 @@ function renderMapLayers() {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
       latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) continue
     visibleTruckIds.add(truck.id)
-    const truckStatus = ['idle', 'in-transit', 'maintenance'].includes(statusClass(truck.status))
+    const truckStatus = ['idle', 'dispatching', 'in-transit', 'maintenance', 'out-of-service'].includes(statusClass(truck.status))
       ? statusClass(truck.status)
       : 'idle'
     const latLng = [latitude, longitude]
@@ -389,25 +500,21 @@ function renderMapLayers() {
       const previous = marker._cityCareState
       if (previous.latitude !== latitude || previous.longitude !== longitude) marker.setLatLng(latLng)
       if (previous.status !== truckStatus) {
-        marker.setIcon(markerIcon(
-          'truck-marker-wrapper',
-          `<span class="truck-marker ${truckStatus}" aria-label="Truck">🚛</span>`
-        ))
+        marker.setIcon(truckMarkerIcon(truckStatus))
       }
       marker.setPopupContent(createTruckPopup(truck))
     } else {
       marker = L.marker(latLng, {
-        icon: markerIcon(
-          'truck-marker-wrapper',
-          `<span class="truck-marker ${truckStatus}" aria-label="Truck">🚛</span>`
-        )
+        pane: 'truckPane',
+        zIndexOffset: 1000,
+        icon: truckMarkerIcon(truckStatus)
       })
       marker.bindPopup(createTruckPopup(truck), { autoPan: true })
       marker.on('click', () => {
         selectedTruck.value = trucks.value.find(item => item.id === truck.id) || truck
         mapInstance.value.setView(marker.getLatLng(), Math.max(mapInstance.value.getZoom(), 14))
       })
-      marker.addTo(markerClusterLayer)
+      marker.addTo(truckLayer)
       truckMarkers.set(truck.id, marker)
     }
     marker._cityCareState = { latitude, longitude, status: truckStatus }
@@ -459,7 +566,7 @@ function renderMapLayers() {
 
   for (const [truckId, marker] of truckMarkers) {
     if (!visibleTruckIds.has(truckId)) {
-      markerClusterLayer.removeLayer(marker)
+      truckLayer.removeLayer(marker)
       truckMarkers.delete(truckId)
     }
   }
@@ -493,15 +600,32 @@ function drawClosestRoute(zoomToRoute = false) {
 async function initializeMap() {
   await nextTick()
   if (!mapContainer.value || mapInstance.value) return
-  mapInstance.value = L.map(mapContainer.value, { scrollWheelZoom: true })
-    .setView([8.48, 124.64], 12)
+  mapInstance.value = L.map(mapContainer.value, {
+    zoomControl: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: true,
+    touchZoom: true,
+    markerZoomAnimation: false,
+    keyboard: true,
+    minZoom: 3,
+    maxZoom: 19
+  }).setView(defaultMapCenter, 12)
+  mapContainer.value.addEventListener('wheel', handleMapWheel, { passive: false })
+  mapInstance.value.on('zoomend', () => {
+    mapZoom.value = mapInstance.value?.getZoom() ?? mapZoom.value
+  })
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(mapInstance.value)
+  mapInstance.value.createPane('truckPane')
+  mapInstance.value.getPane('truckPane').style.zIndex = '650'
+  truckLayer = L.layerGroup().addTo(mapInstance.value)
   markerClusterLayer = L.markerClusterGroup({
-    maxClusterRadius: 40,
-    spiderfyOnMaxZoom: true,
+    maxClusterRadius: 56,
+    animate: false,
+    animateAddingMarkers: false,
+    spiderfyOnMaxZoom: false,
     showCoverageOnHover: false,
     iconCreateFunction(cluster) {
       const count = cluster.getChildCount()
@@ -516,6 +640,58 @@ async function initializeMap() {
   routeLayer = L.layerGroup().addTo(mapInstance.value)
   renderMapLayers()
   mapInstance.value.invalidateSize()
+}
+
+function zoomMap(direction) {
+  if (!mapInstance.value) return
+  mapInstance.value.setZoom(mapInstance.value.getZoom() + direction)
+}
+
+function setMapZoom(zoom) {
+  mapInstance.value?.setZoom(zoom)
+}
+
+function handleMapWheel(event) {
+  if (!event.ctrlKey || !mapInstance.value) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  mapWheelDelta += event.deltaY
+
+  while (Math.abs(mapWheelDelta) >= 100) {
+    mapInstance.value.setZoom(mapInstance.value.getZoom() + (mapWheelDelta < 0 ? 1 : -1))
+    mapWheelDelta += mapWheelDelta < 0 ? 100 : -100
+  }
+
+  window.clearTimeout(mapWheelTimer)
+  mapWheelTimer = window.setTimeout(() => {
+    mapWheelDelta = 0
+  }, 150)
+}
+
+function resetMapView() {
+  mapInstance.value?.setView(defaultMapCenter, 12)
+}
+
+async function toggleMapFullscreen() {
+  const mapCard = mapCardContainer.value
+  if (!mapCard) return
+
+  try {
+    if (document.fullscreenElement === mapCard) {
+      await document.exitFullscreen()
+    } else if (!document.fullscreenElement) {
+      await mapCard.requestFullscreen()
+    }
+  } catch (err) {
+    console.error('Unable to toggle map full screen:', err)
+    errorMessage.value = 'Unable to enter full screen. Check your browser permissions and try again.'
+  }
+}
+
+function handleFullscreenChange() {
+  isMapFullscreen.value = document.fullscreenElement === mapCardContainer.value
+  requestAnimationFrame(() => mapInstance.value?.invalidateSize())
 }
 
 async function loadFleet() {
@@ -538,6 +714,15 @@ async function loadReports() {
   } catch (err) {
     console.error('Failed to load report locations:', err)
     errorMessage.value = err.message || 'Unable to load report locations.'
+  }
+}
+
+async function manualRefresh() {
+  isRefreshing.value = true
+  try {
+    await Promise.all([loadFleet(), loadReports()])
+  } finally {
+    isRefreshing.value = false
   }
 }
 
@@ -592,7 +777,24 @@ async function assignNearestTruck() {
   }
 }
 
+function updateFleetRefreshTimer() {
+  if (refreshTimer) window.clearInterval(refreshTimer)
+  refreshTimer = settingsState.system.autoRefresh
+    ? window.setInterval(() => {
+      void Promise.all([loadFleet(), loadReports()])
+    }, 15000)
+    : null
+}
+
+watch(() => settingsState.system.autoRefresh, updateFleetRefreshTimer)
+
 onMounted(async () => {
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  try {
+    await loadSettings()
+  } catch (err) {
+    console.error('Failed to load fleet preferences:', err)
+  }
   await Promise.all([
     loadFleet(),
     loadReports(),
@@ -609,12 +811,13 @@ onMounted(async () => {
       })
   ])
   await initializeMap()
-  refreshTimer = window.setInterval(() => {
-    void Promise.all([loadFleet(), loadReports()])
-  }, 15000)
+  updateFleetRefreshTimer()
 })
 
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  if (mapContainer.value) mapContainer.value.removeEventListener('wheel', handleMapWheel)
+  if (mapWheelTimer) window.clearTimeout(mapWheelTimer)
   if (refreshTimer) window.clearInterval(refreshTimer)
   if (mapInstance.value) {
     mapInstance.value.remove()
@@ -623,9 +826,10 @@ onUnmounted(() => {
 })
 
 const fleetStats = computed(() => ({
-  inTransit: trucks.value.filter(t => t.status === 'In Transit').length,
+  inTransit: trucks.value.filter(t => ['Dispatching', 'In Transit'].includes(t.status)).length,
   idle: trucks.value.filter(t => t.status === 'Idle').length,
-  maintenance: trucks.value.filter(t => t.status === 'Maintenance').length
+  maintenance: trucks.value.filter(t => t.status === 'Maintenance').length,
+  outOfService: trucks.value.filter(t => t.status === 'Out of Service').length
 }))
 
 const filteredTrucks = computed(() => {
@@ -655,26 +859,61 @@ function selectTruck(truck) {
   }
 }
 
-async function changeVehicleStatus() {
-  if (!selectedTruck.value) return
+function isStatusSaving(truckId) {
+  return statusSavingIds.value.includes(truckId)
+}
 
-  const cycle = {
-    'In Transit': 'Idle',
-    'Idle': 'Maintenance',
-    'Maintenance': 'In Transit'
+function setPendingTruckStatus(truck, nextStatus) {
+  if (!truck || !fleetStatuses.includes(nextStatus)) return
+
+  const pending = { ...pendingTruckStatuses.value }
+  if (nextStatus === truck.status) {
+    delete pending[truck.id]
+  } else {
+    pending[truck.id] = nextStatus
   }
-  const next = cycle[selectedTruck.value.status] || 'In Transit'
+  pendingTruckStatuses.value = pending
+  truckStatusFeedback.value = {
+    ...truckStatusFeedback.value,
+    [truck.id]: { type: 'pending', message: nextStatus === truck.status ? '' : 'Click Update to save this change.' }
+  }
+}
 
+async function saveTruckStatus(truck) {
+  if (!truck || isStatusSaving(truck.id)) return
+  const nextStatus = pendingTruckStatuses.value[truck.id]
+  if (!nextStatus || !fleetStatuses.includes(nextStatus) || nextStatus === truck.status) return
+
+  statusSavingIds.value = [...statusSavingIds.value, truck.id]
+  truckStatusFeedback.value = {
+    ...truckStatusFeedback.value,
+    [truck.id]: { type: 'pending', message: 'Saving status…' }
+  }
   try {
-    await fleetApi.update(selectedTruck.value.id, { status: next })
-    selectedTruck.value.status = next
-    const found = trucks.value.find(t => t.id === selectedTruck.value.id)
-    if (found) found.status = next
+    const response = await fleetApi.update(truck.id, { status: nextStatus })
+    if (response?.success !== true || response.data?.status !== nextStatus) {
+      throw new Error(response?.message || 'The server did not confirm the status update.')
+    }
+
+    Object.assign(truck, response.data)
+    if (selectedTruck.value?.id === truck.id) Object.assign(selectedTruck.value, response.data)
+    const pending = { ...pendingTruckStatuses.value }
+    delete pending[truck.id]
+    pendingTruckStatuses.value = pending
+    truckStatusFeedback.value = {
+      ...truckStatusFeedback.value,
+      [truck.id]: { type: 'success', message: `Status updated to ${nextStatus}.` }
+    }
     renderMapLayers()
     errorMessage.value = ''
   } catch (err) {
     console.error('Failed to update vehicle status:', err)
-    errorMessage.value = err.message || 'Unable to update vehicle status.'
+    truckStatusFeedback.value = {
+      ...truckStatusFeedback.value,
+      [truck.id]: { type: 'error', message: err.message || 'Unable to update vehicle status.' }
+    }
+  } finally {
+    statusSavingIds.value = statusSavingIds.value.filter(id => id !== truck.id)
   }
 }
 
@@ -711,25 +950,31 @@ async function addTruck() {
 .fleet-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
 }
 
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  gap: 18px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .page-title {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: clamp(22px, 2vw, 28px);
+  font-weight: 750;
+  letter-spacing: -0.035em;
   color: var(--text-main);
 }
 
 .page-subtitle {
-  margin: 3px 0 0;
+  margin: 6px 0 0;
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -738,14 +983,17 @@ async function addTruck() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 12px;
+  min-height: 40px;
+  padding: 9px 15px;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   border: none;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
+
+.btn:active { transform: translateY(1px); }
 
 .btn-icon {
   width: 14px;
@@ -760,11 +1008,12 @@ async function addTruck() {
 
 .btn-secondary:hover {
   background-color: var(--bg-surface-elevated);
+  border-color: var(--primary);
 }
 
 .btn-primary {
   background-color: var(--primary);
-  color: #04140a;
+  color: #fff;
 }
 
 .btn-primary:hover {
@@ -779,17 +1028,27 @@ async function addTruck() {
 /* Status Grid */
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .status-card {
+  position: relative;
+  overflow: hidden;
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 16px 18px;
+  border-radius: 16px;
+  padding: 19px 20px;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.status-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-muted);
+  box-shadow: var(--shadow-md);
 }
 
 .status-header {
@@ -799,36 +1058,42 @@ async function addTruck() {
 }
 
 .status-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-muted);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   font-family: var(--font-mono);
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 14%, transparent);
 }
 
-.status-dot.green { background-color: var(--primary); }
-.status-dot.yellow { background-color: var(--status-pending); }
-.status-dot.red { background-color: var(--status-urgent); }
+.status-dot.green { background-color: var(--primary); color: var(--primary); }
+.status-dot.yellow { background-color: var(--status-pending); color: var(--status-pending); }
+.status-dot.red { background-color: var(--status-urgent); color: var(--status-urgent); }
+.status-dot.gray { background-color: #475569; color: #475569; }
 
 .status-val {
-  margin: 10px 0 4px;
-  font-size: 26px;
-  font-weight: 700;
+  margin: 12px 0 2px;
+  font-size: 32px;
+  font-weight: 750;
   font-family: var(--font-mono);
+  line-height: 1.1;
 }
+
+.out-of-service-state .status-val { color: #475569; }
 
 .text-green { color: var(--primary); }
 .text-yellow { color: var(--status-pending); }
 .text-red { color: var(--status-urgent); }
 
 .status-sub {
-  font-size: 11px;
+  margin-top: 4px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -837,34 +1102,64 @@ async function addTruck() {
   position: relative;
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 18px 20px;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.map-card:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--bg-card);
+}
+
+.map-card:fullscreen .map-viewport {
+  flex: 1;
+  height: auto;
+  min-height: 240px;
+  max-height: none;
 }
 
 .map-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.map-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .panel-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
+  letter-spacing: -0.015em;
   color: var(--text-main);
 }
 
 .panel-subtitle {
-  font-size: 11px;
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
 .map-legend {
   display: flex;
   align-items: center;
-  gap: 16px;
-  font-size: 11px;
+  gap: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -875,28 +1170,102 @@ async function addTruck() {
 }
 
 .legend-item .dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
 .legend-item .dot.green { background-color: var(--primary); }
+.legend-item .dot.dispatching { background-color: #2563eb; }
 .legend-item .dot.yellow { background-color: var(--status-pending); }
 .legend-item .dot.red { background-color: var(--status-urgent); }
+.legend-item .dot.out-of-service { background-color: #475569; }
 .legend-item .dot.report-dot { background-color: #8b5cf6; }
 
 .map-viewport {
   position: relative;
-  height: min(62vh, 560px);
-  min-height: 360px;
+  height: min(68vh, 680px);
+  min-height: 440px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: 14px;
   overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.map-controls {
+  position: absolute;
+  z-index: 1000;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #d9e2df;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px #10281b26;
+}
+
+.map-controls button {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: #f3f7f5;
+  color: #183b2a;
+  font-size: 27px;
+  font-weight: 500;
+  line-height: 1;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.map-controls button:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+
+.map-controls button:active:not(:disabled) { transform: scale(0.96); }
+.map-controls button:disabled { cursor: not-allowed; opacity: 0.38; }
+
+.map-controls .map-center-button {
+  width: 44px;
+  height: 44px;
+  margin-top: 3px;
+  border-top: 1px solid #d9e2df;
+  border-radius: 0 0 10px 10px;
+  background: #fff;
+}
+
+.map-center-button svg { width: 19px; height: 19px; }
+
+.map-zoom-slider {
+  width: 28px;
+  height: 126px;
+  margin: 2px 0;
+  accent-color: var(--primary);
+  cursor: ns-resize;
+  direction: rtl;
+  touch-action: none;
+  writing-mode: vertical-lr;
+}
+
+.map-zoom-level {
+  min-width: 40px;
+  color: #52645a;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .map-note {
-  margin: 10px 0 0;
-  font-size: 11px;
+  margin: 12px 2px 0;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--text-muted);
 }
 
@@ -906,10 +1275,10 @@ async function addTruck() {
   justify-content: space-between;
   gap: 16px;
   margin-top: 12px;
-  padding: 12px 14px;
+  padding: 15px 16px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: 12px;
 }
 
 .closest-truck-panel > div {
@@ -928,6 +1297,11 @@ async function addTruck() {
   z-index: 0;
 }
 
+:deep(.leaflet-container:focus-visible) {
+  outline: 3px solid var(--primary);
+  outline-offset: -3px;
+}
+
 :deep(.truck-marker-wrapper),
 :deep(.report-marker-wrapper) {
   background: transparent;
@@ -936,18 +1310,20 @@ async function addTruck() {
 
 :deep(.truck-marker) {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   place-items: center;
-  border: 2px solid white;
-  border-radius: 50%;
+  border: 3px solid white;
+  border-radius: 12px;
   background: #059669;
-  box-shadow: 0 1px 6px #0006;
-  font-size: 18px;
+  box-shadow: 0 2px 9px #0008;
+  font-size: 22px;
 }
 
 :deep(.truck-marker.idle) { background: #d97706; }
+:deep(.truck-marker.dispatching) { background: #2563eb; }
 :deep(.truck-marker.maintenance) { background: #dc2626; }
+:deep(.truck-marker.out-of-service) { background: #475569; }
 
 :deep(.report-marker) {
   display: grid;
@@ -1000,8 +1376,8 @@ async function addTruck() {
   margin-top: 12px;
   background-color: var(--bg-card);
   border: 1px solid var(--border-muted);
-  border-radius: 6px;
-  padding: 14px;
+  border-radius: 14px;
+  padding: 18px;
   box-shadow: var(--shadow-md);
   z-index: 100;
 }
@@ -1064,15 +1440,16 @@ async function addTruck() {
 .table-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .table-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 19px 22px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -1100,12 +1477,12 @@ async function addTruck() {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
-  padding: 10px 16px;
+  padding: 12px 16px;
   font-family: var(--font-mono);
 }
 
 .data-table td {
-  padding: 12px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-main);
 }
@@ -1167,6 +1544,48 @@ async function addTruck() {
   font-family: var(--font-mono);
 }
 
+.status-select {
+  border: 0;
+  cursor: pointer;
+}
+
+.status-select:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.status-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-update-button {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+.status-feedback {
+  flex-basis: 100%;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.status-feedback.pending { color: var(--text-muted); }
+.status-feedback.success { color: var(--status-resolved); }
+.status-feedback.error { color: var(--status-urgent); }
+
+.status-select option {
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.status-select.dispatching {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+
 .status-badge.in-transit {
   background-color: var(--status-resolved-bg);
   color: var(--status-resolved);
@@ -1180,6 +1599,21 @@ async function addTruck() {
 .status-badge.maintenance {
   background-color: var(--status-urgent-bg);
   color: var(--status-urgent);
+}
+
+.status-badge.out-of-service {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+
+.inspector-status-select {
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+  font: inherit;
 }
 
 .action-btn {
@@ -1288,19 +1722,49 @@ async function addTruck() {
   gap: 10px;
 }
 
+@media (max-width: 1024px) {
+  .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 720px) {
+  .page-header,
   .map-header,
-  .closest-truck-panel {
+  .map-header-actions,
+  .closest-truck-panel,
+  .table-card-header {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .header-actions { width: 100%; }
+  .header-actions .btn { flex: 1; justify-content: center; }
+  .status-grid { grid-template-columns: 1fr; }
+  .map-card { padding: 16px; }
+  .map-header-actions { gap: 12px; }
 
   .map-legend {
     flex-wrap: wrap;
   }
 
   .map-viewport {
-    min-height: 320px;
+    height: 62vh;
+    min-height: 340px;
   }
+
+  .map-controls {
+    top: 10px;
+    right: 10px;
+    padding: 5px;
+  }
+
+  .map-controls button {
+    width: 48px;
+    height: 48px;
+  }
+
+  .map-zoom-slider { height: 110px; }
+
+  .table-search,
+  .table-search input { width: 100%; }
 }
 </style>

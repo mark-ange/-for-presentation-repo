@@ -29,6 +29,7 @@ services:
   - type: web
     name: citycare-cdo-admin
     runtime: static
+    rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:

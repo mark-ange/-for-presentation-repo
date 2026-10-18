@@ -1,6 +1,5 @@
 // In-memory runtime storage fallback used ONLY when MongoDB server is offline
-// Initialized with full CityCare CDO civic data
-const { getBarangayLocation, parseCoordinates } = require('../utils/coordinates');
+const { getBarangayLocation } = require('../utils/coordinates');
 
 const memoryStore = {
   users: [
@@ -97,135 +96,7 @@ const memoryStore = {
     }
   ],
 
-  reports: [
-    {
-      _id: 'rep_1',
-      reportId: '#CDO-2026-8901',
-      title: 'Brgy. Carmen, Purok 4',
-      district: 'District 1',
-      barangay: 'Carmen',
-      purokZone: 'Purok 4',
-      landmark: 'Carmen Public Market',
-      gpsCoordinates: '8.4832, 124.6454',
-      location: parseCoordinates('8.4832, 124.6454'),
-      category: 'Waste Collection',
-      media: true,
-      photoUrl: '',
-      status: 'Pending',
-      reporter: 'Maria Santos',
-      description: 'Uncollected household waste has accumulated along the roadside for two collection cycles near the market corner.',
-      unitAssigned: 'Unassigned',
-      team: '',
-      personnel: '',
-      notes: '',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2)
-    },
-    {
-      _id: 'rep_2',
-      reportId: '#CDO-2026-8895',
-      title: 'Brgy. Balulang, Macanhan Road',
-      district: 'District 2',
-      barangay: 'Balulang',
-      purokZone: 'Purok 2',
-      landmark: 'Macanhan Road Intersection',
-      gpsCoordinates: '8.4491, 124.6178',
-      location: parseCoordinates('8.4491, 124.6178'),
-      category: 'Road Repair',
-      media: true,
-      status: 'Assigned',
-      reporter: 'Carlos Reyes',
-      description: 'A growing pothole is affecting vehicles near the intersection and requires immediate inspection and patching.',
-      unitAssigned: 'Roads & Infrastructure Team',
-      team: 'Roads & Infrastructure Team',
-      personnel: 'A. Ramos',
-      notes: 'Inspect the road surface and prepare an asphalt patch estimate.',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5)
-    },
-    {
-      _id: 'rep_3',
-      reportId: '#CDO-2026-8891',
-      title: 'Brgy. Lapasan, Zone 3 Highway',
-      district: 'District 1',
-      barangay: 'Lapasan',
-      purokZone: 'Zone 3',
-      landmark: 'Near Puregold Lapasan',
-      gpsCoordinates: '8.4862, 124.6612',
-      location: parseCoordinates('8.4862, 124.6612'),
-      category: 'Waste Collection',
-      media: true,
-      status: 'In Progress',
-      reporter: 'Elena Dimaculangan',
-      description: 'Commercial waste bin overflowing onto pedestrian sidewalk.',
-      unitAssigned: 'Sanitation Response Team',
-      team: 'Sanitation Response Team',
-      personnel: 'R. Dela Cruz',
-      notes: 'Dispatched CLENRO Truck #4 to clear site.',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12)
-    },
-    {
-      _id: 'rep_4',
-      reportId: '#CDO-2026-8874',
-      title: 'Brgy. Macasandig, Tibasak',
-      district: 'District 1',
-      barangay: 'Macasandig',
-      purokZone: 'Tibasak',
-      landmark: 'Riverside Walkway',
-      gpsCoordinates: '8.4688, 124.6415',
-      location: parseCoordinates('8.4688, 124.6415'),
-      category: 'Clogged Drainage Waste',
-      media: false,
-      status: 'Resolved',
-      reporter: 'Josephine Valerio',
-      description: 'Drainage culvert blocked with plastic waste causing slight ponding during heavy rain.',
-      unitAssigned: 'Sanitation Response Team',
-      team: 'Sanitation Response Team',
-      personnel: 'J. Santos',
-      notes: 'Debris completely excavated and cleared. Water flowing normally.',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2)
-    },
-    {
-      _id: 'rep_5',
-      reportId: '#CDO-2026-8860',
-      title: 'Brgy. Lumbia, Airport Road',
-      district: 'District 3',
-      barangay: 'Lumbia',
-      purokZone: 'Purok 1',
-      landmark: 'Near Old Airport Gate',
-      gpsCoordinates: '8.4125, 124.6102',
-      location: parseCoordinates('8.4125, 124.6102'),
-      category: 'Fallen Tree',
-      media: true,
-      status: 'Resolved',
-      reporter: 'Ramon Bautista',
-      description: 'Large acacia branch fallen across the outer lane following thunderstorm.',
-      unitAssigned: 'Parks & Emergency Team',
-      team: 'Parks & Emergency Team',
-      personnel: 'L. Navarro',
-      notes: 'Branch sawed and hauled away. Lane reopened to traffic.',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3)
-    },
-    {
-      _id: 'rep_6',
-      reportId: '#CDO-2026-8842',
-      title: 'Brgy. Bulua, Westbound Terminal Zone',
-      district: 'District 1',
-      barangay: 'Bulua',
-      purokZone: 'Zone 5',
-      landmark: 'Opposite Jeepney Terminal',
-      gpsCoordinates: '8.5012, 124.6288',
-      location: parseCoordinates('8.5012, 124.6288'),
-      category: 'Street Lighting',
-      media: false,
-      status: 'Pending',
-      reporter: 'Arnel Mendoza',
-      description: 'Non-functional solar street light causing low visibility at night.',
-      unitAssigned: 'Unassigned',
-      team: '',
-      personnel: '',
-      notes: '',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 8)
-    }
-  ],
+  reports: [],
 
   schedules: [
     {
@@ -270,5 +141,29 @@ const memoryStore = {
     }
   ]
 };
+
+const sampleCollectionSchedules = require('../data/sampleCollectionSchedules');
+sampleCollectionSchedules.forEach(sampleSchedule => {
+  const existing = memoryStore.schedules.find(schedule =>
+    schedule.barangay.toLowerCase() === sampleSchedule.barangay.toLowerCase()
+  );
+
+  if (!existing) {
+    memoryStore.schedules.push(sampleSchedule);
+    return;
+  }
+
+  const hasSampleFallback = (existing.areaSchedules || []).some(areaSchedule =>
+    areaSchedule.appliesToAllAreas &&
+    areaSchedule.isSample &&
+    areaSchedule.areaName === 'Barangay-wide sample route'
+  );
+  if (!hasSampleFallback) {
+    existing.areaSchedules = [
+      ...(existing.areaSchedules || []),
+      sampleSchedule.areaSchedules[0]
+    ];
+  }
+});
 
 module.exports = memoryStore;

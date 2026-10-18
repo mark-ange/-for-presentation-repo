@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
@@ -183,6 +184,112 @@ router.post('/login',
   }
 });
 
+// @route   POST /api/auth/facebook
+// @desc    Verify a Facebook access token and sign in or create a resident
+// @access  Public
+router.post('/facebook',
+  authLimiter,
+  validateInput([
+    body('accessToken')
+      .isString().withMessage('Facebook access token is required')
+      .trim()
+      .notEmpty().withMessage('Facebook access token is required')
+      .isLength({ max: 4096 }).withMessage('Facebook access token is invalid')
+  ]),
+  async (req, res) => {
+    const appId = process.env.FACEBOOK_APP_ID;
+    const appSecret = process.env.FACEBOOK_APP_SECRET;
+    if (!appId || !appSecret) {
+      return res.status(503).json({
+        success: false,
+        message: 'Facebook sign-in is not configured on the server.'
+      });
+    }
+
+    try {
+      const accessToken = req.body.accessToken;
+      const debugUrl = new URL('https://graph.facebook.com/debug_token');
+      debugUrl.searchParams.set('input_token', accessToken);
+      debugUrl.searchParams.set('access_token', `${appId}|${appSecret}`);
+      const debugResponse = await fetch(debugUrl);
+      const debugBody = await debugResponse.json();
+      const tokenData = debugBody.data;
+
+      if (!debugResponse.ok || !tokenData?.is_valid || String(tokenData.app_id) !== appId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Facebook access token is invalid.'
+        });
+      }
+
+      const profileUrl = new URL('https://graph.facebook.com/me');
+      profileUrl.searchParams.set('fields', 'id,name,email');
+      profileUrl.searchParams.set('access_token', accessToken);
+      const profileResponse = await fetch(profileUrl);
+      const profile = await profileResponse.json();
+      if (!profileResponse.ok || !profile.id || String(profile.id) !== String(tokenData.user_id)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Could not verify the Facebook account.'
+        });
+      }
+
+      let user = await User.findOne({ facebookId: String(profile.id) });
+      if (user && user.role !== 'resident') {
+        return res.status(403).json({
+          success: false,
+          message: 'This Facebook account is not registered as a resident.'
+        });
+      }
+
+      const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
+      if (!user && email && await User.findOne({ email })) {
+        return res.status(409).json({
+          success: false,
+          message: 'An account already uses this email. Sign in with that account first; Facebook sign-in will not link accounts automatically.'
+        });
+      }
+
+      if (!user) {
+        user = new User({
+          fullName: typeof profile.name === 'string' && profile.name.trim()
+            ? profile.name.trim()
+            : 'Facebook Resident',
+          phoneNumber: `FB-${profile.id}`,
+          email: email || `facebook_${profile.id}@facebook.citycare.invalid`,
+          facebookId: String(profile.id),
+          password: crypto.randomBytes(32).toString('hex'),
+          role: 'resident'
+        });
+      }
+
+      await user.save();
+      return res.json({
+        success: true,
+        message: 'Facebook sign-in successful.',
+        token: generateToken(user._id),
+        data: {
+          _id: user._id,
+          fullName: user.fullName,
+          phoneNumber: user.phoneNumber,
+          email: user.email,
+          barangay: user.barangay,
+          purokZone: user.purokZone,
+          profilePhoto: user.profilePhoto,
+          role: user.role,
+          ecoPoints: user.ecoPoints
+        }
+      });
+    } catch (error) {
+      console.error('Facebook sign-in failed:', error);
+      return res.status(502).json({
+        success: false,
+        message: 'Facebook sign-in could not be verified. Please try again.'
+      });
+    }
+  }
+);
+
 // @route   POST /api/auth/admin-login
 // @desc    Authenticate CLENRO Administrator for Web Portal
 // @access  Public
@@ -336,7 +443,17 @@ router.get('/profile', protect, async (req, res) => {
 // @route   PUT /api/auth/profile
 // @desc    Update admin/user profile
 // @access  Private
-router.put('/profile', protect, async (req, res) => {
+router.put('/profile',
+  protect,
+  validateInput([
+    body('fullName').optional().isString().trim().notEmpty().withMessage('Full name cannot be empty'),
+    body('email').optional().isEmail().normalizeEmail().withMessage('Please provide a valid email address'),
+    body('phoneNumber').optional({ checkFalsy: true }).isString().trim(),
+    body('securityPin').optional().matches(/^\d{4,6}$/).withMessage('Security PIN must contain 4 to 6 digits'),
+    body('newPassword').optional().isString(),
+    body('currentPassword').optional().isString()
+  ]),
+  async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -344,19 +461,19 @@ router.put('/profile', protect, async (req, res) => {
     }
 
     const { fullName, email, phoneNumber, securityPin, currentPassword, newPassword } = req.body;
-    if (fullName) user.fullName = fullName.trim();
-    if (email) user.email = email.trim().toLowerCase();
-    if (phoneNumber) user.phoneNumber = phoneNumber.trim();
+    if (fullName !== undefined) user.fullName = fullName.trim();
+    if (email !== undefined) user.email = email.trim().toLowerCase();
+    if (phoneNumber !== undefined) user.phoneNumber = phoneNumber.trim();
+    const isChangingCredentials = securityPin !== undefined || Boolean(newPassword);
+    if (isChangingCredentials &&
+      (!currentPassword ||
+        (!(await user.matchPassword(currentPassword)) && user.password !== currentPassword))) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
     if (securityPin !== undefined) {
-      if (!/^\d{4,6}$/.test(securityPin)) {
-        return res.status(400).json({ success: false, message: 'Security PIN must contain 4 to 6 digits' });
-      }
       user.securityPin = securityPin;
     }
     if (newPassword) {
-      if (!currentPassword || !(await user.matchPassword(currentPassword))) {
-        return res.status(400).json({ success: false, message: 'Current password is incorrect' });
-      }
       if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) ||
           !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
         return res.status(400).json({

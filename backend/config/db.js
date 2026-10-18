@@ -9,10 +9,23 @@ if (configuredDnsServers?.length) {
   dns.setServers(configuredDnsServers);
 }
 
+const getMongoUri = () => {
+  const mongoURI = process.env.MONGO_URI
+    || process.env.MONGODB_URI
+    || process.env.MONGO_URI_DIRECT
+    || process.env.MONGODB_URI_DIRECT;
+
+  if (!mongoURI || mongoURI.includes('<db_username>') || mongoURI.includes('******')) {
+    return null;
+  }
+
+  return mongoURI;
+};
+
 const connectDB = async () => {
-  const mongoURI = process.env.MONGO_URI;
+  const mongoURI = getMongoUri();
   if (!mongoURI) {
-    console.error('MongoDB connection unavailable: MONGO_URI is not configured.');
+    console.error('MongoDB connection unavailable: no valid MONGO_URI or MONGODB_URI is configured.');
     return null;
   }
 
@@ -20,7 +33,7 @@ const connectDB = async () => {
     console.log('🔗 Attempting MongoDB connection...');
     const conn = await mongoose.connect(mongoURI, {
       dbName: process.env.MONGO_DATABASE || 'citycare_db',
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 20000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10
     });
@@ -30,7 +43,7 @@ const connectDB = async () => {
   } catch (error) {
     console.error(`⚠️ MongoDB Connection Error: ${error.message}`);
     console.log('');
-    console.log('🔧 Verify MONGO_URI, Atlas network access, and the database password.');
+    console.log('🔧 Verify the MongoDB URI, Atlas network access, and the database password.');
     return null;
   }
 };

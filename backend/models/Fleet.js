@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const { getBarangayLocation, parseCoordinates } = require('../utils/coordinates');
 
+const FLEET_STATUSES = ['Idle', 'Dispatching', 'In Transit', 'Maintenance', 'Out of Service'];
+
 const fleetSchema = new mongoose.Schema({
   truckId: {
     type: String,
@@ -23,7 +25,7 @@ const fleetSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['In Transit', 'Idle', 'Maintenance'],
+    enum: FLEET_STATUSES,
     default: 'Idle'
   },
   location: {
@@ -60,7 +62,8 @@ const fleetSchema = new mongoose.Schema({
 });
 
 fleetSchema.pre('validate', function (next) {
-  if (!this.location) {
+  const coordinates = this.get('location.coordinates');
+  if (!Array.isArray(coordinates) || coordinates.length === 0) {
     this.location = getBarangayLocation(this.barangay) || undefined;
     this.locationSource = 'barangay-estimate';
   } else {

@@ -4,86 +4,91 @@ const mongoose = require('mongoose');
 const { body } = require('express-validator');
 const Barangay = require('../models/Barangay');
 const Report = require('../models/Report');
-const memoryStore = require('../config/memoryStore');
 const { apiLimiter, sanitizeMongoDB, validateInput } = require('../middleware/securityMiddleware');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
+const { ensureBarangayForReport, normalizeBarangayName } = require('../utils/barangaySync');
 
 // @route   GET /api/barangays
 // @desc    Get all barangays with live incident metrics calculated from reports
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    if (mongoose.connection.readyState === 1) {
-      const barangays = await Barangay.find().sort({ name: 1 });
-
-      const results = await Promise.all(
-        barangays.map(async (bg) => {
-          const bgRegex = new RegExp(`^${bg.name}$`, 'i');
-
-          const activeCount = await Report.countDocuments({
-            barangay: bgRegex,
-            status: { $in: ['Pending', 'Assigned', 'In Progress', 'PENDING', 'ASSIGNED', 'IN_PROGRESS'] }
-          });
-
-          const resolvedCount = await Report.countDocuments({
-            barangay: bgRegex,
-            status: { $in: ['Resolved', 'RESOLVED'] }
-          });
-
-          const totalCount = await Report.countDocuments({
-            barangay: bgRegex
-          });
-
-          return {
-            id: bg._id,
-            _id: bg._id,
-            name: bg.name,
-            district: bg.district || 'District 1',
-            active: activeCount,
-            resolved: resolvedCount,
-            total: totalCount,
-            teams: bg.teams || 2,
-            status: bg.status || 'Active'
-          };
-        })
-      );
-
-      return res.json({
-        success: true,
-        count: results.length,
-        data: results
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Barangay data is unavailable until MongoDB reconnects.'
       });
     }
 
-    // Memory store fallback
-    const results = memoryStore.barangays.map(bg => {
-      const activeCount = memoryStore.reports.filter(r =>
-        r.barangay.toLowerCase() === bg.name.toLowerCase() &&
-        ['pending', 'assigned', 'in progress'].includes((r.status || '').toLowerCase())
-      ).length;
+    const [barangays, reportStats] = await Promise.all([
+      Barangay.find().sort({ name: 1 }).lean(),
+      Report.aggregate([
+        {
+          $group: {
+            _id: '$barangay',
+            total: { $sum: 1 },
+            active: {
+              $sum: {
+                $cond: [
+                  { $in: ['$status', ['Pending', 'Assigned', 'In Progress', 'PENDING', 'ASSIGNED', 'IN_PROGRESS']] },
+                  1,
+                  0
+                ]
+              }
+            },
+            resolved: {
+              $sum: {
+                $cond: [
+                  { $in: ['$status', ['Resolved', 'RESOLVED']] },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        }
+      ])
+    ]);
 
-      const resolvedCount = memoryStore.reports.filter(r =>
-        r.barangay.toLowerCase() === bg.name.toLowerCase() &&
-        (r.status || '').toLowerCase() === 'resolved'
-      ).length;
+    const statsByName = new Map();
+    for (const stat of reportStats) {
+      const name = normalizeBarangayName(stat._id);
+      if (!name) continue;
+      const key = name.toLocaleLowerCase();
+      const current = statsByName.get(key) || { name, active: 0, resolved: 0, total: 0 };
+      current.active += stat.active;
+      current.resolved += stat.resolved;
+      current.total += stat.total;
+      statsByName.set(key, current);
+    }
 
-      const totalCount = memoryStore.reports.filter(r =>
-        r.barangay.toLowerCase() === bg.name.toLowerCase()
-      ).length;
+    const barangaysByName = new Map(barangays.map(barangay => [
+      normalizeBarangayName(barangay.name).toLocaleLowerCase(),
+      barangay
+    ]));
+    for (const [key, stats] of statsByName) {
+      if (!barangaysByName.has(key)) {
+        const discoveredBarangay = await ensureBarangayForReport(Barangay, stats.name);
+        barangaysByName.set(key, discoveredBarangay.toObject());
+      }
+    }
 
-      return {
-        id: bg._id,
-        _id: bg._id,
-        name: bg.name,
-        district: bg.district,
-        active: activeCount,
-        resolved: resolvedCount,
-        total: totalCount,
-        teams: bg.teams,
-        status: bg.status
-      };
-    });
-
+    const results = [...barangaysByName.entries()]
+      .map(([key, bg]) => {
+        const stats = statsByName.get(key) || { active: 0, resolved: 0, total: 0 };
+        return {
+          id: bg._id,
+          _id: bg._id,
+          name: bg.name,
+          district: bg.district || 'Unassigned',
+          active: stats.active,
+          resolved: stats.resolved,
+          total: stats.total,
+          teams: bg.teams ?? 0,
+          status: bg.status || 'Active'
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
     res.json({
       success: true,
       count: results.length,

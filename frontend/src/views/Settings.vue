@@ -8,10 +8,10 @@
       </div>
 
       <div class="header-actions">
-        <button class="btn btn-secondary" @click="resetToDefaults">
+        <button class="btn btn-secondary" :disabled="isSaving" @click="resetToDefaults">
           Reset Preferences
         </button>
-        <button class="btn btn-primary" @click="saveAccount">
+        <button class="btn btn-primary" :disabled="isSaving" @click="saveActiveSection">
           Save Changes
         </button>
       </div>
@@ -109,7 +109,7 @@
           </div>
 
           <div class="profile-summary">
-            <div class="profile-avatar">AD</div>
+            <div class="profile-avatar">{{ profileInitials }}</div>
             <div class="profile-details">
               <strong class="profile-title">{{ account.name }}</strong>
               <span class="profile-sub">CLENRO Central Command Desk • Cagayan de Oro City Hall</span>
@@ -119,12 +119,12 @@
           <div class="form-grid">
             <div class="form-item">
               <label>Full Operator Name</label>
-              <input v-model="account.name" type="text" class="form-input" />
+              <input v-model="account.name" type="text" class="form-input" required />
             </div>
 
             <div class="form-item">
               <label>Official Government Email</label>
-              <input v-model="account.email" type="email" class="form-input" />
+              <input v-model="account.email" type="email" class="form-input" required />
             </div>
 
             <div class="form-item">
@@ -139,7 +139,7 @@
           </div>
 
           <div class="panel-footer">
-            <button class="btn btn-primary" @click="saveAccount">Save Profile</button>
+            <button class="btn btn-primary" :disabled="isSaving" @click="saveAccount">Save Profile</button>
           </div>
         </div>
 
@@ -148,38 +148,50 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Dispatch Alert Notifications</h2>
-              <span class="panel-subtitle">Configure real-time sound and banner alerts</span>
+              <span class="panel-subtitle">Choose which report events trigger alerts while the portal is open</span>
             </div>
           </div>
 
           <div class="toggle-list">
             <div class="toggle-item">
               <div>
-                <strong>New Incident Alert Sound</strong>
-                <p>Audible chirp whenever a citizen submits a report from a covered barangay.</p>
+                <strong>New Incident Alerts</strong>
+                <p>Show an in-app alert when a new citizen report is submitted.</p>
               </div>
-              <input v-model="notifications.newReports" type="checkbox" class="checkbox-input" />
+              <input v-model="notifications.newReports" type="checkbox" class="checkbox-input" aria-label="Enable new incident alerts" />
             </div>
 
             <div class="toggle-item">
               <div>
-                <strong>Fleet Dispatch Confirmation</strong>
-                <p>Notification when a collection unit confirms arrival at reported waste coordinates.</p>
+                <strong>Dispatch Status Alerts</strong>
+                <p>Show an alert when a report is assigned to a collection unit or moves in progress.</p>
               </div>
-              <input v-model="notifications.dispatch" type="checkbox" class="checkbox-input" />
+              <input v-model="notifications.dispatch" type="checkbox" class="checkbox-input" aria-label="Enable dispatch status alerts" />
             </div>
 
             <div class="toggle-item">
               <div>
-                <strong>Barangay Clearance Alerts</strong>
-                <p>Log notification when a ticket is marked resolved by sanitation crew.</p>
+                <strong>Resolution Alerts</strong>
+                <p>Show an alert when a report is marked resolved.</p>
               </div>
-              <input v-model="notifications.resolution" type="checkbox" class="checkbox-input" />
+              <input v-model="notifications.resolution" type="checkbox" class="checkbox-input" aria-label="Enable resolution alerts" />
             </div>
           </div>
+          <p class="notification-permission">
+            Enabled alerts are checked about every 10 seconds. Browser notification permission:
+            {{ notificationPermission === 'denied' ? 'blocked; change this site’s browser permissions to enable' : notificationPermission }}.
+            <button
+              v-if="notificationPermission === 'default'"
+              type="button"
+              class="permission-btn"
+              @click="enableBrowserNotifications"
+            >
+              Enable browser notifications
+            </button>
+          </p>
 
           <div class="panel-footer">
-            <button class="btn btn-primary" @click="saveNotifications">Save Alerts</button>
+            <button class="btn btn-primary" :disabled="isSaving" @click="saveNotifications">Save Alerts</button>
           </div>
         </div>
 
@@ -195,27 +207,27 @@
           <div class="form-grid">
             <div class="form-item">
               <label>Current Password</label>
-              <input v-model="passwordForm.current" type="password" class="form-input" placeholder="Current password" />
+              <input v-model="passwordForm.current" type="password" autocomplete="current-password" class="form-input" placeholder="Required to change password or PIN" />
             </div>
 
             <div class="form-item">
               <label>Emergency Dispatch PIN (4 digits)</label>
-              <input v-model="passwordForm.pin" type="password" maxlength="6" class="form-input" placeholder="Enter a new PIN" />
+              <input v-model="passwordForm.pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" autocomplete="new-password" class="form-input" placeholder="4–6 digits" />
             </div>
 
             <div class="form-item">
               <label>New Password</label>
-              <input v-model="passwordForm.newPassword" type="password" class="form-input" placeholder="At least 8 characters" />
+              <input v-model="passwordForm.newPassword" type="password" autocomplete="new-password" class="form-input" placeholder="At least 8 characters" />
             </div>
 
             <div class="form-item">
               <label>Confirm New Password</label>
-              <input v-model="passwordForm.confirm" type="password" class="form-input" placeholder="Re-enter new password" />
+              <input v-model="passwordForm.confirm" type="password" autocomplete="new-password" class="form-input" placeholder="Re-enter new password" />
             </div>
           </div>
 
           <div class="panel-footer">
-            <button class="btn btn-primary" @click="changePassword">Update Security</button>
+            <button class="btn btn-primary" :disabled="isSaving" @click="changePassword">Update Security</button>
           </div>
         </div>
 
@@ -224,7 +236,7 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-title">System Defaults</h2>
-              <span class="panel-subtitle">Configure default landing console and background sync interval</span>
+              <span class="panel-subtitle">Set the default landing page, ticket filter, audit period, and automatic refresh behavior</span>
             </div>
           </div>
 
@@ -259,7 +271,7 @@
             </div>
 
             <div class="form-item">
-              <label>Automatic Dashboard Refresh</label>
+              <label>Automatic Data Refresh</label>
               <select v-model="system.autoRefresh" class="form-input select-input">
                 <option :value="true">Enabled (Automatically refresh)</option>
                 <option :value="false">Disabled (Manual refresh only)</option>
@@ -268,7 +280,7 @@
           </div>
 
           <div class="panel-footer">
-            <button class="btn btn-primary" @click="saveSystem">Save System Defaults</button>
+            <button class="btn btn-primary" :disabled="isSaving" @click="saveSystem">Save System Defaults</button>
           </div>
         </div>
       </main>
@@ -282,9 +294,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { authApi } from '../services/api'
+import { applySettings, loadSettings } from '../services/settingsStore'
 
 const router = useRouter()
 
@@ -296,7 +309,15 @@ const account = ref({
   phone: ''
 })
 
-const notifications = ref({})
+const notifications = ref({
+  newReports: true,
+  dispatch: true,
+  resolution: true
+})
+const notificationPermission = ref(
+  'Notification' in window ? Notification.permission : 'not supported'
+)
+const isSaving = ref(false)
 const passwordForm = ref({
   current: '',
   newPassword: '',
@@ -304,8 +325,17 @@ const passwordForm = ref({
   pin: ''
 })
 
-const system = ref({})
+const system = ref({
+  dashboardView: 'Executive Dashboard',
+  ticketStatus: 'All Statuses',
+  reportPeriod: 'Current Month',
+  autoRefresh: true
+})
 const savedMessage = ref('')
+const profileInitials = computed(() => {
+  const name = account.value.name.trim()
+  return name ? name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() : 'AD'
+})
 
 function showSavedMessage(message) {
   savedMessage.value = message
@@ -316,20 +346,19 @@ function showSavedMessage(message) {
 
 onMounted(async () => {
   try {
-    const [profileResponse, settingsResponse] = await Promise.all([
+    const [profileResponse, preferences] = await Promise.all([
       authApi.getProfile(),
-      authApi.getSettings()
+      loadSettings(true)
     ])
     const profile = profileResponse.data
-    const settings = settingsResponse.data
 
     account.value = {
       name: profile.fullName || '',
       email: profile.email || '',
       phone: profile.phoneNumber || ''
     }
-    notifications.value = settings.notifications
-    system.value = settings.system
+    notifications.value = { ...preferences.notifications }
+    system.value = { ...preferences.system }
   } catch (err) {
     console.error('Failed to load settings:', err)
     showSavedMessage(err.message || 'Unable to load settings.')
@@ -337,27 +366,35 @@ onMounted(async () => {
 })
 
 async function saveAccount() {
+  isSaving.value = true
   try {
     await authApi.updateProfile({
       fullName: account.value.name,
       email: account.value.email,
       phoneNumber: account.value.phone
     })
+    window.dispatchEvent(new Event('admin-profile-updated'))
     showSavedMessage('Profile changes saved successfully.')
   } catch (err) {
     console.error('Failed to save profile:', err)
     showSavedMessage(err.message || 'Unable to save profile changes.')
+  } finally {
+    isSaving.value = false
   }
 }
 
 async function saveNotifications() {
+  isSaving.value = true
   try {
     const response = await authApi.updateSettings({ notifications: notifications.value })
     notifications.value = response.data.notifications
+    applySettings(response.data)
     showSavedMessage('Notification settings saved.')
   } catch (err) {
     console.error('Failed to save notification settings:', err)
     showSavedMessage(err.message || 'Unable to save notification settings.')
+  } finally {
+    isSaving.value = false
   }
 }
 
@@ -376,7 +413,25 @@ async function changePassword() {
     showSavedMessage('Enter your current password to change it.')
     return
   }
+  if (passwordForm.value.pin && !passwordForm.value.current) {
+    showSavedMessage('Enter your current password to change the security PIN.')
+    return
+  }
+  if (passwordForm.value.pin && !/^\d{4,6}$/.test(passwordForm.value.pin)) {
+    showSavedMessage('The security PIN must contain 4 to 6 digits.')
+    return
+  }
+  if (passwordForm.value.newPassword &&
+    (passwordForm.value.newPassword.length < 8 ||
+      !/[A-Z]/.test(passwordForm.value.newPassword) ||
+      !/[a-z]/.test(passwordForm.value.newPassword) ||
+      !/[0-9]/.test(passwordForm.value.newPassword) ||
+      !/[^A-Za-z0-9]/.test(passwordForm.value.newPassword))) {
+    showSavedMessage('Use at least 8 characters with uppercase, lowercase, a number, and a symbol.')
+    return
+  }
 
+  isSaving.value = true
   try {
     const credentials = {}
     if (passwordForm.value.pin) credentials.securityPin = passwordForm.value.pin
@@ -384,6 +439,7 @@ async function changePassword() {
       credentials.currentPassword = passwordForm.value.current
       credentials.newPassword = passwordForm.value.newPassword
     }
+    if (passwordForm.value.pin) credentials.currentPassword = passwordForm.value.current
     await authApi.updateProfile(credentials)
     showSavedMessage('Security credentials updated.')
     passwordForm.value.current = ''
@@ -393,29 +449,64 @@ async function changePassword() {
   } catch (err) {
     console.error('Failed to update security credentials:', err)
     showSavedMessage(err.message || 'Unable to update security credentials.')
+  } finally {
+    isSaving.value = false
   }
 }
 
 async function saveSystem() {
+  isSaving.value = true
   try {
     const response = await authApi.updateSettings({ system: system.value })
     system.value = response.data.system
+    applySettings(response.data)
     showSavedMessage('System preferences saved.')
   } catch (err) {
     console.error('Failed to save system preferences:', err)
     showSavedMessage(err.message || 'Unable to save system preferences.')
+  } finally {
+    isSaving.value = false
   }
 }
 
 async function resetToDefaults() {
+  isSaving.value = true
   try {
     const response = await authApi.resetSettings()
     notifications.value = response.data.notifications
     system.value = response.data.system
+    applySettings(response.data)
     showSavedMessage('Preferences restored to defaults.')
   } catch (err) {
     console.error('Failed to reset preferences:', err)
     showSavedMessage(err.message || 'Unable to reset preferences.')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function saveActiveSection() {
+  if (activeSection.value === 'account') return saveAccount()
+  if (activeSection.value === 'notifications') return saveNotifications()
+  if (activeSection.value === 'security') return changePassword()
+  return saveSystem()
+}
+
+async function enableBrowserNotifications() {
+  if (!('Notification' in window)) {
+    showSavedMessage('This browser does not support browser notifications.')
+    return
+  }
+  try {
+    notificationPermission.value = await Notification.requestPermission()
+    if (notificationPermission.value === 'granted') {
+      showSavedMessage('Browser notifications enabled.')
+    } else {
+      showSavedMessage('Browser notifications were not enabled. In-portal alerts will still work.')
+    }
+  } catch (err) {
+    console.error('Failed to request browser notification permission:', err)
+    showSavedMessage('Unable to enable browser notifications.')
   }
 }
 
@@ -487,6 +578,11 @@ function logout() {
 
 .btn-primary:hover {
   background-color: var(--primary-hover);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 /* Settings Layout */
@@ -704,6 +800,23 @@ function logout() {
   width: 16px;
   height: 16px;
   accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.notification-permission {
+  margin: 16px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.permission-btn {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
   cursor: pointer;
 }
 

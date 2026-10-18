@@ -6,7 +6,9 @@ import Fleet from '../views/Fleet.vue'
 import Barangays from '../views/Barangays.vue'
 import Reports from '../views/Reports.vue'
 import Settings from '../views/Settings.vue'
+import CommunityContent from '../views/CommunityContent.vue'
 import { getAuthToken } from '../services/api'
+import { getPreferredLandingPath } from '../services/settingsStore'
 
 const routes = [
   {
@@ -42,6 +44,11 @@ const routes = [
   component: Reports
 },
 {
+  path: '/content',
+  name: 'CommunityContent',
+  component: CommunityContent
+},
+{
   path: '/settings',
   name: 'Settings',
   component: Settings
@@ -53,18 +60,17 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to) => {
   const jwtToken = getAuthToken()
   const firebaseToken = localStorage.getItem('firebaseToken')
   const isAuthenticated = jwtToken || firebaseToken
   
   if (to.path !== '/login' && !isAuthenticated) {
-    next('/login')
+    return '/login'
   } else if (to.path === '/login' && isAuthenticated) {
-    next('/dashboard')
-  } else {
-    next()
+    return await getPreferredLandingPath(true)
   }
+  return true
 })
 
 export default router

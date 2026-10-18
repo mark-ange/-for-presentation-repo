@@ -301,12 +301,31 @@ export const reportsApi = {
 // DASHBOARD & ANALYTICS APIs
 // ==========================================
 export const dashboardApi = {
-  getStats: async () => {
+  getStats: async (reportPeriod = null) => {
     const [reportsResponse, fleetResponse] = await Promise.all([
       reportsApi.getAll(),
       fleetApi.getAll()
     ]);
-    const reports = reportsResponse.data || [];
+    let reports = reportsResponse.data || [];
+    if (reportPeriod) {
+      const now = new Date();
+      let start;
+      let end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      if (reportPeriod === 'Last Month') {
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        end = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else if (reportPeriod === 'Current Quarter') {
+        start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+      } else if (reportPeriod === 'Current Year') {
+        start = new Date(now.getFullYear(), 0, 1);
+      } else {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      reports = reports.filter(report => {
+        const createdAt = new Date(report.createdAt);
+        return Number.isFinite(createdAt.getTime()) && createdAt >= start && createdAt < end;
+      });
+    }
     const fleet = Array.isArray(fleetResponse) ? fleetResponse : (fleetResponse.data || []);
     const countStatus = (status) => reports.filter(
       report => String(report.status || '').toUpperCase().replace(/\s+/g, '_') === status
@@ -357,6 +376,11 @@ export const dashboardApi = {
               ? new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : ''
           })),
+        reportChanges: reports.map(report => ({
+          reportId: report.reportId || report.id || report._id,
+          status: report.status,
+          barangay: report.barangay
+        })),
         barangayStats: [...barangays.entries()].map(([name, values]) => ({
           name,
           count: values.count,
@@ -474,6 +498,59 @@ export const scheduleApi = {
 
   delete: async (id) => {
     return await request(`/schedules/${id}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+export const contentApi = {
+  getManaged: async (type = '') => {
+    const query = type ? `?type=${encodeURIComponent(type)}` : '';
+    return await request(`/content/manage${query}`);
+  },
+
+  getPublished: async (type = '') => {
+    const query = type ? `?type=${encodeURIComponent(type)}` : '';
+    return await request(`/content${query}`);
+  },
+
+  getImage: async (contentId, imageId, manage = false) => {
+    const endpoint = manage
+      ? `/content/manage/${encodeURIComponent(contentId)}/images/${encodeURIComponent(imageId)}`
+      : `/content/${encodeURIComponent(contentId)}/images/${encodeURIComponent(imageId)}`;
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+
+    if (response.status === 401) {
+      clearAuthSession();
+      window.location.href = '/login';
+      throw new Error('Your session expired. Please sign in again.');
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.message || `Unable to load image (HTTP ${response.status}).`);
+    }
+    return response.blob();
+  },
+
+  create: async (data) => {
+    return await request('/content', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  update: async (id, data) => {
+    return await request(`/content/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  delete: async (id) => {
+    return await request(`/content/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     });
   }

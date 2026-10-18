@@ -5,12 +5,10 @@ const bcrypt = require('bcryptjs');
 dotenv.config();
 
 const User = require('./models/User');
-const Report = require('./models/Report');
 const Barangay = require('./models/Barangay');
 const Fleet = require('./models/Fleet');
 const Schedule = require('./models/Schedule');
-const Notification = require('./models/Notification');
-const { getBarangayLocation, parseCoordinates } = require('./utils/coordinates');
+const { getBarangayLocation } = require('./utils/coordinates');
 
 const seedData = async (shouldExit = true) => {
   try {
@@ -23,18 +21,16 @@ const seedData = async (shouldExit = true) => {
 
     console.log('Clearing existing collections to seed fresh database records...');
     await User.deleteMany();
-    await Report.deleteMany();
     await Barangay.deleteMany();
     await Fleet.deleteMany();
     await Schedule.deleteMany();
-    await Notification.deleteMany();
 
     console.log('Seeding Administrator Accounts...');
     const salt = await bcrypt.genSalt(10);
     const adminPassword = await bcrypt.hash('admin123', salt);
     const staffPassword = await bcrypt.hash('staff123', salt);
 
-    const adminUser = await User.create({
+    await User.create({
       fullName: 'CLENRO Central Admin',
       email: 'admin@clenro-cdo.gov.ph',
       phoneNumber: '0917-123-4567',
@@ -122,134 +118,6 @@ const seedData = async (shouldExit = true) => {
       }
     ]);
 
-    console.log('Seeding Civic Incident Reports...');
-    await Report.insertMany([
-      {
-        reportId: '#CDO-2026-8901',
-        title: 'Brgy. Carmen, Purok 4',
-        district: 'District 1',
-        barangay: 'Carmen',
-        purokZone: 'Purok 4',
-        landmark: 'Carmen Public Market',
-        gpsCoordinates: '8.4832, 124.6454',
-        category: 'Waste Collection',
-        media: true,
-        photoUrl: 'https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=600&q=80',
-        status: 'Pending',
-        reporter: 'Maria Santos',
-        description: 'Uncollected household waste has accumulated along the roadside for two collection cycles near the market corner.',
-        unitAssigned: 'Unassigned',
-        team: '',
-        personnel: '',
-        notes: '',
-        user: adminUser._id,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2) // 2 hours ago
-      },
-      {
-        reportId: '#CDO-2026-8895',
-        title: 'Brgy. Balulang, Macanhan Road',
-        district: 'District 2',
-        barangay: 'Balulang',
-        purokZone: 'Purok 2',
-        landmark: 'Macanhan Road Intersection',
-        gpsCoordinates: '8.4491, 124.6178',
-        category: 'Road Repair',
-        media: true,
-        status: 'Assigned',
-        reporter: 'Carlos Reyes',
-        description: 'A growing pothole is affecting vehicles near the intersection and requires immediate inspection and patching.',
-        unitAssigned: 'Roads & Infrastructure Team',
-        team: 'Roads & Infrastructure Team',
-        personnel: 'A. Ramos',
-        notes: 'Inspect the road surface and prepare an asphalt patch estimate.',
-        user: adminUser._id,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5) // 5 hours ago
-      },
-      {
-        reportId: '#CDO-2026-8891',
-        title: 'Brgy. Lapasan, Zone 3 Highway',
-        district: 'District 1',
-        barangay: 'Lapasan',
-        purokZone: 'Zone 3',
-        landmark: 'Near Puregold Lapasan',
-        gpsCoordinates: '8.4862, 124.6612',
-        category: 'Waste Collection',
-        media: true,
-        status: 'In Progress',
-        reporter: 'Elena Dimaculangan',
-        description: 'Commercial waste bin overflowing onto pedestrian sidewalk.',
-        unitAssigned: 'Sanitation Response Team',
-        team: 'Sanitation Response Team',
-        personnel: 'R. Dela Cruz',
-        notes: 'Dispatched CLENRO Truck #4 to clear site.',
-        user: adminUser._id,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12) // 12 hours ago
-      },
-      {
-        reportId: '#CDO-2026-8874',
-        title: 'Brgy. Macasandig, Tibasak',
-        district: 'District 1',
-        barangay: 'Macasandig',
-        purokZone: 'Tibasak',
-        landmark: 'Riverside Walkway',
-        gpsCoordinates: '8.4688, 124.6415',
-        category: 'Clogged Drainage Waste',
-        media: false,
-        status: 'Resolved',
-        reporter: 'Josephine Valerio',
-        description: 'Drainage culvert blocked with plastic waste causing slight ponding during heavy rain.',
-        unitAssigned: 'Sanitation Response Team',
-        team: 'Sanitation Response Team',
-        personnel: 'J. Santos',
-        notes: 'Debris completely excavated and cleared. Water flowing normally.',
-        user: adminUser._id,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2) // 2 days ago
-      },
-      {
-        reportId: '#CDO-2026-8860',
-        title: 'Brgy. Lumbia, Airport Road',
-        district: 'District 3',
-        barangay: 'Lumbia',
-        purokZone: 'Purok 1',
-        landmark: 'Near Old Airport Gate',
-        gpsCoordinates: '8.4125, 124.6102',
-        category: 'Fallen Tree',
-        media: true,
-        status: 'Resolved',
-        reporter: 'Ramon Bautista',
-        description: 'Large acacia branch fallen across the outer lane following thunderstorm.',
-        unitAssigned: 'Parks & Emergency Team',
-        team: 'Parks & Emergency Team',
-        personnel: 'L. Navarro',
-        notes: 'Branch sawed and hauled away. Lane reopened to traffic.',
-        user: adminUser._id,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3) // 3 days ago
-      },
-      {
-        reportId: '#CDO-2026-8842',
-        title: 'Brgy. Bulua, Westbound Terminal Zone',
-        district: 'District 1',
-        barangay: 'Bulua',
-        purokZone: 'Zone 5',
-        landmark: 'Opposite Jeepney Terminal',
-        gpsCoordinates: '8.5012, 124.6288',
-        category: 'Street Lighting',
-        media: false,
-        status: 'Pending',
-        reporter: 'Arnel Mendoza',
-        description: 'Non-functional solar street light causing low visibility at night.',
-        unitAssigned: 'Unassigned',
-        team: '',
-        personnel: '',
-        notes: '',
-        user: adminUser._id,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 8) // 8 hours ago
-      }
-    ].map(report => ({
-      ...report,
-      location: parseCoordinates(report.gpsCoordinates)
-    })));
-
     console.log('Seeding Waste Collection Schedules...');
     await Schedule.insertMany([
       {
@@ -286,28 +154,6 @@ const seedData = async (shouldExit = true) => {
         nonBiodegradableDays: 'Tuesday, Friday',
         timeSlot: '08:00 AM - 12:00 PM',
         assignedTruck: 'CLENRO Truck #5'
-      }
-    ]);
-
-    console.log('Seeding Notifications & Push Alerts...');
-    await Notification.insertMany([
-      {
-        title: 'New Incident Submitted',
-        body: 'Resident reported Waste Collection issue in Carmen Purok 4 (#CDO-2026-8901).',
-        type: 'REPORT_UPDATE',
-        time: '2 hours ago'
-      },
-      {
-        title: 'Dispatch Truck En Route',
-        body: 'CLENRO Truck #4 dispatched to Lapasan Zone 3 for commercial collection.',
-        type: 'DISPATCH',
-        time: '5 hours ago'
-      },
-      {
-        title: 'Barangay Macasandig Schedule Alert',
-        body: 'Collection schedule active for biodegradable waste today.',
-        type: 'COLLECTION_SCHEDULE',
-        time: 'Yesterday'
       }
     ]);
 

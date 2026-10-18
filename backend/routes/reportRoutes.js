@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const Report = require('../models/Report');
+const Barangay = require('../models/Barangay');
 const memoryStore = require('../config/memoryStore');
 const {
   apiLimiter,
@@ -12,6 +13,7 @@ const {
 } = require('../middleware/securityMiddleware');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 const { parseCoordinates } = require('../utils/coordinates');
+const { ensureBarangayForReport, normalizeBarangayName } = require('../utils/barangaySync');
 
 const REPORT_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];
 const DEFAULT_REPORT_PAGE_SIZE = 1000;
@@ -85,12 +87,12 @@ const formatReport = (report, includePhoto = true) => {
     date: dateStr,
     time: timeStr,
     location: doc.title || `Brgy. ${doc.barangay}, ${doc.purokZone || 'Zone 1'}`,
-    district: doc.district || 'District 1',
-    barangay: doc.barangay,
-    purok: doc.purokZone || 'Purok 1',
-    purokZone: doc.purokZone || 'Purok 1',
-    gps: doc.gpsCoordinates || '8.4822° N, 124.6175° E',
-    gpsCoordinates: doc.gpsCoordinates || '8.4822° N, 124.6175° E',
+    district: doc.district || 'Unassigned',
+    barangay: normalizeBarangayName(doc.barangay),
+    purok: doc.purokZone || '',
+    purokZone: doc.purokZone || '',
+    gps: doc.gpsCoordinates || '',
+    gpsCoordinates: doc.gpsCoordinates || '',
     geoLocation: doc.location || parseCoordinates(doc.gpsCoordinates),
     landmark: doc.landmark || '',
     category: doc.category || 'Waste Collection',
@@ -131,7 +133,10 @@ router.get('/', async (req, res) => {
     if (mongoose.connection.readyState === 1) {
       let query = {};
       if (userEmail) query.userEmail = new RegExp(`^${escapeRegex(userEmail)}$`, 'i');
-      if (barangay) query.barangay = new RegExp(escapeRegex(barangay), 'i');
+      if (barangay) {
+        const normalizedBarangay = normalizeBarangayName(barangay);
+        query.barangay = new RegExp(`^(?:brgy\\.?\\s*)?${escapeRegex(normalizedBarangay)}$`, 'i');
+      }
       if (district) query.district = new RegExp(`^${escapeRegex(district)}$`, 'i');
       if (category) query.category = new RegExp(`^${escapeRegex(category)}$`, 'i');
       if (status) {
@@ -186,7 +191,10 @@ router.get('/', async (req, res) => {
       list = list.filter(r => (r.userEmail || '').toLowerCase() === userEmail.toLowerCase());
     }
     if (barangay) {
-      list = list.filter(r => (r.barangay || '').toLowerCase() === barangay.toLowerCase());
+      const normalizedBarangay = normalizeBarangayName(barangay).toLowerCase();
+      list = list.filter(r =>
+        normalizeBarangayName(r.barangay).toLowerCase() === normalizedBarangay
+      );
     }
     if (district) {
       list = list.filter(r => (r.district || '').toLowerCase() === district.toLowerCase());
@@ -299,6 +307,13 @@ router.post('/',
         photoEvidenceUrl, photoBase64, media, reporter, userEmail, email,
         location, coordinates, latitude, longitude
       } = req.body;
+      const normalizedBarangay = normalizeBarangayName(barangay);
+      if (!normalizedBarangay) {
+        return res.status(400).json({
+          success: false,
+          message: 'Barangay is required. Select the area where the incident was reported.'
+        });
+      }
 
       const hasCoordinateInput = location !== undefined ||
         coordinates !== undefined ||
@@ -325,6 +340,7 @@ router.post('/',
       }
 
       if (reportId && mongoose.connection.readyState === 1) {
+        await ensureBarangayForReport(Barangay, normalizedBarangay, district);
         const existingReport = await Report.findOne({ reportId });
         if (existingReport) {
           if (existingReport.userEmail.toLowerCase() !== normalizedEmail.toLowerCase()) {
@@ -355,11 +371,11 @@ router.post('/',
 
       const reportData = {
         ...(reportId ? { reportId } : {}),
-        title: title || `Brgy. ${barangay || 'Carmen'}, ${purokZone || 'Zone 1'}`,
+        title: title || `Brgy. ${normalizedBarangay}${purokZone ? `, ${purokZone}` : ''}`,
         category: category || 'Waste Collection',
-        barangay: barangay || 'Carmen',
-        district: district || 'District 1',
-        purokZone: purokZone || 'Purok 1',
+        barangay: normalizedBarangay,
+        district: district || 'Unassigned',
+        purokZone: purokZone || '',
         landmark: landmark || '',
         status: 'Pending',
         description: description || 'Civic issue reported by resident.',
@@ -367,7 +383,7 @@ router.post('/',
           ? gpsCoordinates
           : parsedLocation
             ? `${parsedLocation.coordinates[1]}, ${parsedLocation.coordinates[0]}`
-            : '8.4822° N, 124.6175° E',
+            : '',
         ...(parsedLocation ? { location: parsedLocation } : {}),
         unitAssigned: 'Unassigned',
         team: '',
@@ -381,6 +397,7 @@ router.post('/',
       };
 
       if (mongoose.connection.readyState === 1) {
+        await ensureBarangayForReport(Barangay, normalizedBarangay, district);
         const newReport = await Report.create({
           ...reportData,
           user: req.user ? req.user._id : null

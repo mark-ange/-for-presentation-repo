@@ -18,15 +18,15 @@ const reportSchema = new mongoose.Schema({
   barangay: {
     type: String,
     required: true,
-    default: 'Carmen'
+    trim: true
   },
   district: {
     type: String,
-    default: 'District 1'
+    default: 'Unassigned'
   },
   purokZone: {
     type: String,
-    default: 'Purok 1'
+    default: ''
   },
   landmark: {
     type: String,
@@ -47,7 +47,7 @@ const reportSchema = new mongoose.Schema({
   },
   gpsCoordinates: {
     type: String,
-    default: '8.4822° N, 124.6175° E'
+    default: ''
   },
   location: {
     type: {

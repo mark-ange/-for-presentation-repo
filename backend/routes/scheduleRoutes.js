@@ -7,18 +7,48 @@ const memoryStore = require('../config/memoryStore');
 const { apiLimiter, sanitizeMongoDB, validateInput } = require('../middleware/securityMiddleware');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
+function isValidAreaSchedules(areaSchedules) {
+  if (!Array.isArray(areaSchedules) || areaSchedules.length > 200) return false;
+
+  const areaNames = new Set();
+  return areaSchedules.every(areaSchedule => {
+    if (!areaSchedule || typeof areaSchedule !== 'object') return false;
+    const requiredFields = [
+      'areaName',
+      'biodegradableDays',
+      'nonBiodegradableDays',
+      'timeSlot',
+      'assignedTruck'
+    ];
+    if (requiredFields.some(field => (
+      typeof areaSchedule[field] !== 'string' ||
+      !areaSchedule[field].trim() ||
+      areaSchedule[field].length > (field === 'areaName' ? 160 : 300)
+    ))) {
+      return false;
+    }
+
+    if (areaSchedule.isSample !== undefined && typeof areaSchedule.isSample !== 'boolean') return false;
+    if (areaSchedule.appliesToAllAreas !== undefined &&
+        typeof areaSchedule.appliesToAllAreas !== 'boolean') return false;
+
+    const normalizedName = areaSchedule.areaName.trim().toLocaleLowerCase();
+    if (areaNames.has(normalizedName)) return false;
+    areaNames.add(normalizedName);
+    return true;
+  });
+}
+
 // @route   GET /api/schedules
 // @desc    Get waste collection schedules
 // @access  Public
 router.get('/', async (req, res) => {
   try {
     const { barangay } = req.query;
-
     if (mongoose.connection.readyState === 1) {
-      let query = {};
-      if (barangay && barangay.trim()) {
-        query.barangay = new RegExp(barangay.trim(), 'i');
-      }
+      const query = barangay && barangay.trim()
+        ? { barangay: new RegExp(`^${barangay.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+        : {};
       const schedules = await Schedule.find(query).sort({ barangay: 1 });
       return res.json({
         success: true,
@@ -29,7 +59,7 @@ router.get('/', async (req, res) => {
 
     let list = memoryStore.schedules || [];
     if (barangay && barangay.trim()) {
-      list = list.filter(s => (s.barangay || '').toLowerCase().includes(barangay.trim().toLowerCase()));
+      list = list.filter(s => (s.barangay || '').toLowerCase() === barangay.trim().toLowerCase());
     }
 
     res.json({
@@ -53,16 +83,34 @@ router.post('/',
     body('biodegradableDays').optional().isString().trim().escape(),
     body('nonBiodegradableDays').optional().isString().trim().escape(),
     body('timeSlot').optional().isString().trim().escape(),
-    body('assignedTruck').optional().isString().trim().escape()
+    body('assignedTruck').optional().isString().trim().escape(),
+    body('areaSchedules').optional().isArray({ max: 200 }).bail().custom(isValidAreaSchedules)
+      .withMessage('Area schedules must have unique area names and complete collection details.')
   ]),
   protect,
   adminOnly,
   async (req, res) => {
   try {
-    const { barangay, biodegradableDays, nonBiodegradableDays, timeSlot, assignedTruck } = req.body;
+    const {
+      barangay,
+      biodegradableDays,
+      nonBiodegradableDays,
+      timeSlot,
+      assignedTruck,
+      areaSchedules = []
+    } = req.body;
 
     if (!barangay) {
       return res.status(400).json({ success: false, message: 'Barangay name is required' });
+    }
+    const baseScheduleValues = [biodegradableDays, nonBiodegradableDays, timeSlot, assignedTruck];
+    const hasBaseSchedule = baseScheduleValues.some(value => value !== undefined && value !== '');
+    if ((hasBaseSchedule && baseScheduleValues.some(value => !value)) ||
+        (!hasBaseSchedule && areaSchedules.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide a complete barangay-wide schedule or at least one complete area schedule.'
+      });
     }
 
     const existing = await Schedule.findOne({ barangay: new RegExp(`^${barangay.trim()}$`, 'i') });
@@ -72,10 +120,16 @@ router.post('/',
 
     const created = await Schedule.create({
       barangay: barangay.trim(),
-      biodegradableDays: biodegradableDays || 'Monday, Wednesday, Friday',
-      nonBiodegradableDays: nonBiodegradableDays || 'Tuesday, Thursday, Saturday',
-      timeSlot: timeSlot || '06:00 AM - 10:00 AM',
-      assignedTruck: assignedTruck || 'CLENRO Truck #1'
+      ...(hasBaseSchedule ? {
+        biodegradableDays,
+        nonBiodegradableDays,
+        timeSlot,
+        assignedTruck
+      } : {}),
+      areaSchedules: areaSchedules.map(areaSchedule => ({
+        ...areaSchedule,
+        isSample: areaSchedule.isSample !== false
+      }))
     });
 
     res.status(201).json({
@@ -98,23 +152,31 @@ router.put('/:id',
     body('biodegradableDays').optional().isString().trim().escape(),
     body('nonBiodegradableDays').optional().isString().trim().escape(),
     body('timeSlot').optional().isString().trim().escape(),
-    body('assignedTruck').optional().isString().trim().escape()
+    body('assignedTruck').optional().isString().trim().escape(),
+    body('areaSchedules').optional().isArray({ max: 200 }).bail().custom(isValidAreaSchedules)
+      .withMessage('Area schedules must have unique area names and complete collection details.')
   ]),
   protect,
   adminOnly,
   async (req, res) => {
   try {
-    const { biodegradableDays, nonBiodegradableDays, timeSlot, assignedTruck } = req.body;
+    const { biodegradableDays, nonBiodegradableDays, timeSlot, assignedTruck, areaSchedules } = req.body;
     const schedule = await Schedule.findById(req.params.id);
 
     if (!schedule) {
       return res.status(404).json({ success: false, message: 'Schedule not found' });
     }
 
-    if (biodegradableDays) schedule.biodegradableDays = biodegradableDays;
-    if (nonBiodegradableDays) schedule.nonBiodegradableDays = nonBiodegradableDays;
-    if (timeSlot) schedule.timeSlot = timeSlot;
-    if (assignedTruck) schedule.assignedTruck = assignedTruck;
+    if (biodegradableDays !== undefined) schedule.biodegradableDays = biodegradableDays;
+    if (nonBiodegradableDays !== undefined) schedule.nonBiodegradableDays = nonBiodegradableDays;
+    if (timeSlot !== undefined) schedule.timeSlot = timeSlot;
+    if (assignedTruck !== undefined) schedule.assignedTruck = assignedTruck;
+    if (areaSchedules !== undefined) {
+      schedule.areaSchedules = areaSchedules.map(areaSchedule => ({
+        ...areaSchedule,
+        isSample: areaSchedule.isSample !== false
+      }));
+    }
 
     await schedule.save();
 

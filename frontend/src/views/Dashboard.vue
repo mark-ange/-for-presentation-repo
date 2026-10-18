@@ -162,9 +162,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardApi } from '../services/api'
+import { loadSettings, settingsState } from '../services/settingsStore'
 
 const router = useRouter()
 
@@ -237,9 +238,23 @@ async function forceRefresh() {
   await loadDashboardData()
 }
 
-onMounted(() => {
+function updateRefreshTimer() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = settingsState.system.autoRefresh
+    ? setInterval(loadDashboardData, 8000)
+    : null
+}
+
+watch(() => settingsState.system.autoRefresh, updateRefreshTimer)
+
+onMounted(async () => {
+  try {
+    await loadSettings()
+  } catch (err) {
+    console.error('Failed to load refresh preference:', err)
+  }
   loadDashboardData()
-  pollTimer = setInterval(loadDashboardData, 8000)
+  updateRefreshTimer()
 })
 
 onUnmounted(() => {

@@ -35,7 +35,12 @@
       <div
         class="counter-tab"
         :class="{ active: activeStatusFilter === '' }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="activeStatusFilter === ''"
         @click="setStatusFilter('')"
+        @keydown.enter="setStatusFilter('')"
+        @keydown.space.prevent="setStatusFilter('')"
       >
         <div class="counter-header">
           <span class="counter-name">ALL TICKETS</span>
@@ -49,7 +54,12 @@
       <div
         class="counter-tab status-pending"
         :class="{ active: activeStatusFilter === 'PENDING' }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="activeStatusFilter === 'PENDING'"
         @click="setStatusFilter('PENDING')"
+        @keydown.enter="setStatusFilter('PENDING')"
+        @keydown.space.prevent="setStatusFilter('PENDING')"
       >
         <div class="counter-header">
           <span class="counter-name">PENDING</span>
@@ -66,7 +76,12 @@
       <div
         class="counter-tab status-assigned"
         :class="{ active: activeStatusFilter === 'ASSIGNED' }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="activeStatusFilter === 'ASSIGNED'"
         @click="setStatusFilter('ASSIGNED')"
+        @keydown.enter="setStatusFilter('ASSIGNED')"
+        @keydown.space.prevent="setStatusFilter('ASSIGNED')"
       >
         <div class="counter-header">
           <span class="counter-name">ASSIGNED</span>
@@ -83,7 +98,12 @@
       <div
         class="counter-tab status-inprogress"
         :class="{ active: activeStatusFilter === 'IN_PROGRESS' }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="activeStatusFilter === 'IN_PROGRESS'"
         @click="setStatusFilter('IN_PROGRESS')"
+        @keydown.enter="setStatusFilter('IN_PROGRESS')"
+        @keydown.space.prevent="setStatusFilter('IN_PROGRESS')"
       >
         <div class="counter-header">
           <span class="counter-name">IN PROGRESS</span>
@@ -100,7 +120,12 @@
       <div
         class="counter-tab status-resolved"
         :class="{ active: activeStatusFilter === 'RESOLVED' }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="activeStatusFilter === 'RESOLVED'"
         @click="setStatusFilter('RESOLVED')"
+        @keydown.enter="setStatusFilter('RESOLVED')"
+        @keydown.space.prevent="setStatusFilter('RESOLVED')"
       >
         <div class="counter-header">
           <span class="counter-name">RESOLVED</span>
@@ -117,7 +142,12 @@
       <div
         class="counter-tab status-rejected"
         :class="{ active: activeStatusFilter === 'REJECTED' }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="activeStatusFilter === 'REJECTED'"
         @click="setStatusFilter('REJECTED')"
+        @keydown.enter="setStatusFilter('REJECTED')"
+        @keydown.space.prevent="setStatusFilter('REJECTED')"
       >
         <div class="counter-header">
           <span class="counter-name">REJECTED</span>
@@ -171,8 +201,9 @@
         <p>Loading incident reports...</p>
       </div>
 
-      <table v-else class="data-table">
-        <thead>
+      <div v-else class="table-scroll" role="region" aria-label="Incident reports table" tabindex="0">
+        <table class="data-table">
+          <thead>
           <tr>
             <th>REPORT ID</th>
             <th>RESIDENT EMAIL</th>
@@ -184,8 +215,8 @@
             <th>MEDIA</th>
             <th class="text-right">ACTIONS</th>
           </tr>
-        </thead>
-        <tbody>
+          </thead>
+          <tbody>
           <tr
             v-for="ticket in paginatedTickets"
             :key="ticket.reportId || ticket.id || ticket._id"
@@ -257,12 +288,14 @@
           </tr>
 
           <tr v-if="paginatedTickets.length === 0">
-            <td colspan="8" class="empty-state">
+            <td colspan="9" class="empty-state">
               No incident reports match your criteria.
             </td>
           </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-scroll-hint">Scroll or swipe horizontally to see all report details.</p>
 
       <!-- Table Pagination Footer -->
       <div class="table-footer">
@@ -347,7 +380,7 @@
 
             <div class="meta-item full-width">
               <span class="meta-label">GPS Coordinates</span>
-              <strong class="meta-val font-mono">{{ selectedTicket.gpsCoordinates || selectedTicket.gps }}</strong>
+              <strong class="meta-val font-mono">{{ selectedTicket.gpsCoordinates || selectedTicket.gps || 'No GPS coordinates provided' }}</strong>
             </div>
 
             <div class="meta-item full-width">
@@ -355,6 +388,14 @@
               <strong class="meta-val">{{ selectedTicket.userEmail || selectedTicket.reporter }}</strong>
             </div>
           </div>
+
+          <section class="report-location-section" aria-label="Reported incident location map">
+            <span class="meta-label">Reported Location on Map</span>
+            <div v-if="reportMapCoordinates" ref="reportMapContainer" class="report-location-map"></div>
+            <p v-else class="location-unavailable-message">
+              This report does not include valid GPS coordinates, so its location cannot be shown on the map.
+            </p>
+          </section>
 
           <!-- Image Display Section -->
           <template v-if="selectedTicket.photoUrl || selectedTicket.imageUrl || selectedTicket.image">
@@ -523,9 +564,12 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { barangayApi, fleetApi, reportsApi } from '../services/api'
 import { useRoute, useRouter } from 'vue-router'
+import { loadSettings, settingsState } from '../services/settingsStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -552,6 +596,13 @@ const category = ref('')
 const activeStatusFilter = ref('')
 
 const selectedTicket = ref(null)
+const reportMapContainer = ref(null)
+const reportMapCoordinates = computed(() => selectedTicket.value
+  ? parseReportCoordinates(selectedTicket.value.geoLocation) ||
+    parseReportCoordinates(selectedTicket.value.gpsCoordinates || selectedTicket.value.gps)
+  : null)
+let reportMapInstance = null
+let reportMapMarker = null
 const isCustomUnit = ref(false)
 const customUnitInput = ref('')
 const imageError = ref(false)
@@ -567,6 +618,70 @@ const fleet = ref([])
 const availableFleet = computed(() => fleet.value.filter(truck =>
   String(truck.status || '').toLowerCase() !== 'maintenance'
 ))
+
+function parseReportCoordinates(value) {
+  if (value && value.type === 'Point' && Array.isArray(value.coordinates) &&
+      typeof value.coordinates[0] === 'number' && typeof value.coordinates[1] === 'number') {
+    const latitude = value.coordinates[1]
+    const longitude = value.coordinates[0]
+    return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+      latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+      ? [latitude, longitude]
+      : null
+  }
+
+  if (typeof value !== 'string') return null
+  const match = value.trim().match(
+    /^\s*(-?\d+(?:\.\d+)?)\s*[°º]?\s*([NS])?\s*,\s*(-?\d+(?:\.\d+)?)\s*[°º]?\s*([EW])?\s*$/i
+  )
+  if (!match) return null
+
+  const withHemisphere = (coordinate, hemisphere) => {
+    const number = Number(coordinate)
+    if (hemisphere?.toUpperCase() === 'S' || hemisphere?.toUpperCase() === 'W') return -Math.abs(number)
+    if (hemisphere?.toUpperCase() === 'N' || hemisphere?.toUpperCase() === 'E') return Math.abs(number)
+    return number
+  }
+  const latitude = withHemisphere(match[1], match[2])
+  const longitude = withHemisphere(match[3], match[4])
+  return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+    ? [latitude, longitude]
+    : null
+}
+
+function disposeReportMap() {
+  reportMapInstance?.remove()
+  reportMapInstance = null
+  reportMapMarker = null
+}
+
+watch(reportMapCoordinates, async coordinates => {
+  await nextTick()
+  if (!selectedTicket.value || !coordinates || !reportMapContainer.value) {
+    disposeReportMap()
+    return
+  }
+
+  if (!reportMapInstance) {
+    reportMapInstance = L.map(reportMapContainer.value, { scrollWheelZoom: false })
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(reportMapInstance)
+    reportMapMarker = L.marker(coordinates).addTo(reportMapInstance)
+      .bindPopup('Resident-reported location')
+  } else {
+    reportMapMarker?.setLatLng(coordinates)
+  }
+
+  reportMapInstance.setView(coordinates, 16)
+  const map = reportMapInstance
+  requestAnimationFrame(() => {
+    if (reportMapInstance === map) map.invalidateSize()
+  })
+}, { flush: 'post' })
+
 const currentUnitIsUnavailable = computed(() => {
   const selectedUnit = assignment.value.unitAssigned
   return selectedUnit &&
@@ -718,6 +833,26 @@ function goToPage(page) {
   currentPage.value = Math.min(Math.max(page, 1), totalPages.value)
 }
 
+watch([search, barangay, category, activeStatusFilter], () => {
+  if (currentPage.value !== 1) {
+    currentPage.value = 1
+    return
+  }
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => fetchTickets(true), 300)
+})
+
+watch(currentPage, () => {
+  fetchTickets(true)
+})
+
+watch(
+  () => route.query.q,
+  query => {
+    search.value = typeof query === 'string' ? query : ''
+  }
+)
+
 function viewTicket(ticket) {
   selectedTicket.value = ticket
   saveNotification.value = null
@@ -734,19 +869,6 @@ function viewTicket(ticket) {
     isCustomUnit.value = false
     customUnitInput.value = ''
   }
-
-  watch([search, barangay, category, activeStatusFilter], () => {
-    if (currentPage.value !== 1) {
-      currentPage.value = 1
-      return
-    }
-    clearTimeout(filterTimer)
-    filterTimer = setTimeout(() => fetchTickets(true), 300)
-  })
-
-  watch(currentPage, () => {
-    fetchTickets(true)
-  })
 
   assignment.value = {
     status: normalizeStatus(ticket.status) || 'ASSIGNED',
@@ -785,6 +907,7 @@ watch(
 
 function closeTicket() {
   selectedTicket.value = null
+  disposeReportMap()
   saveNotification.value = null
   imageError.value = false
   isLoadingPhoto.value = false
@@ -867,7 +990,29 @@ async function saveStatusAndDispatch() {
   }
 }
 
-onMounted(() => {
+function updateTicketRefreshTimer() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = settingsState.system.autoRefresh
+    ? setInterval(() => fetchTickets(true), 5000)
+    : null
+}
+
+watch(() => settingsState.system.autoRefresh, updateTicketRefreshTimer)
+
+onMounted(async () => {
+  try {
+    await loadSettings()
+  } catch (err) {
+    console.error('Failed to load ticket preferences:', err)
+  }
+  if (typeof route.query.q === 'string') search.value = route.query.q
+  if (typeof route.query.status === 'string') {
+    activeStatusFilter.value = route.query.status
+  } else {
+    activeStatusFilter.value = settingsState.system.ticketStatus === 'All Statuses'
+      ? ''
+      : settingsState.system.ticketStatus
+  }
   fetchTickets(false)
   barangayApi.getAll()
     .then(response => {
@@ -887,12 +1032,13 @@ onMounted(() => {
       console.error('Failed to load fleet assignments:', err)
       fleetError.value = err.message || 'Unable to load fleet assignments.'
     })
-  pollTimer = setInterval(() => fetchTickets(true), 5000)
+  updateTicketRefreshTimer()
 })
 
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
   if (filterTimer) clearTimeout(filterTimer)
+  disposeReportMap()
 })
 </script>
 
@@ -991,11 +1137,16 @@ onUnmounted(() => {
 ======================================================== */
 .counters-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 
 .counter-tab {
+  min-width: 0;
+  width: 100%;
+  color: var(--text-main);
+  font: inherit;
+  text-align: left;
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
@@ -1010,6 +1161,10 @@ onUnmounted(() => {
 .counter-tab:hover {
   border-color: var(--border-muted);
   background-color: var(--bg-card-hover);
+}
+
+.counter-tab:focus-visible {
+  outline-offset: 2px;
 }
 
 .counter-tab.active {
@@ -1070,10 +1225,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .search-input-wrap {
-  flex: 1;
+  flex: 1 1 300px;
+  min-width: min(100%, 240px);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1100,6 +1257,7 @@ onUnmounted(() => {
 }
 
 .filter-select {
+  min-width: 150px;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-muted);
   border-radius: 6px;
@@ -1116,17 +1274,36 @@ onUnmounted(() => {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  overflow: hidden;
+  overflow: clip;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-color: var(--border-muted) transparent;
+  scrollbar-width: thin;
+}
+
+.table-scroll-hint {
+  display: none;
+  margin: 8px 14px 0;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .data-table {
   width: 100%;
+  min-width: 1180px;
   border-collapse: collapse;
   text-align: left;
   font-size: 13px;
 }
 
 .data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-muted);
@@ -1135,12 +1312,14 @@ onUnmounted(() => {
   letter-spacing: 0.05em;
   padding: 10px 16px;
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .data-table td {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-main);
+  vertical-align: middle;
 }
 
 .table-row {
@@ -1524,6 +1703,31 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.report-location-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-location-map {
+  height: 240px;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-surface);
+  z-index: 0;
+}
+
+.location-unavailable-message {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .meta-item {
   display: flex;
   flex-direction: column;
@@ -1824,6 +2028,44 @@ textarea.form-control {
 
   .status-toggle-group {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .counters-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .table-scroll-hint {
+    display: block;
+  }
+}
+
+@media (max-width: 700px) {
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .counters-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .table-filter-bar {
+    align-items: stretch;
+  }
+
+  .search-input-wrap,
+  .filter-select,
+  .table-filter-bar > .btn {
+    flex: 1 1 100%;
+    width: 100%;
   }
 }
 </style>

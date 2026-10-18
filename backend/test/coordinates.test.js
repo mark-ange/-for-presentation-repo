@@ -58,12 +58,23 @@ test('calculates spherical distance and formats meter/kilometer labels', () => {
 let baseUrl;
 let server;
 let originalConnectionState;
+const originalReports = memoryStore.reports;
 
 before(async () => {
   originalConnectionState = mongoose.connection.readyState;
   if (originalConnectionState !== 0) {
     throw new Error('Memory-store API test requires MongoDB to be disconnected.');
   }
+
+  memoryStore.reports = [{
+    _id: 'report_test_nearest',
+    reportId: '#CDO-TEST-NEAREST',
+    barangay: 'Carmen',
+    gpsCoordinates: '8.4832, 124.6454',
+    location: parseCoordinates('8.4832, 124.6454'),
+    status: 'Pending',
+    createdAt: new Date()
+  }];
 
   const app = express();
   app.use(express.json());
@@ -79,6 +90,7 @@ before(async () => {
 
 after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
+  memoryStore.reports = originalReports;
 });
 
 test('serves fleet coordinates and nearest active trucks from memory data', async () => {
@@ -117,15 +129,18 @@ test('accepts legacy GPS strings, numeric coordinates, and GeoJSON report locati
   const submissions = [
     {
       reportId: reportIds[0],
+      barangay: 'Opol',
       gpsCoordinates: '8.4822° N, 124.6175° E'
     },
     {
       reportId: reportIds[1],
+      barangay: 'Opol',
       latitude: 8.4822,
       longitude: 124.6175
     },
     {
       reportId: reportIds[2],
+      barangay: 'Opol',
       location: { type: 'Point', coordinates: [124.6175, 8.4822] }
     }
   ];
@@ -139,14 +154,31 @@ test('accepts legacy GPS strings, numeric coordinates, and GeoJSON report locati
       });
       const result = await response.json();
       assert.equal(response.status, 201, result.message);
+      assert.equal(result.data.barangay, 'Opol');
       assert.deepEqual(result.data.geoLocation, {
         type: 'Point',
         coordinates: [124.6175, 8.4822]
       });
     }
+    const barangayReports = await fetch(
+      `${baseUrl.replace('/fleet', '/reports')}?barangay=${encodeURIComponent('Brgy. Opol')}`
+    );
+    const filteredReports = await barangayReports.json();
+    assert.equal(filteredReports.total, submissions.length);
   } finally {
     memoryStore.reports = memoryStore.reports.filter(report => !reportIds.includes(report.reportId));
   }
+});
+
+test('rejects reports without a barangay instead of defaulting them to Carmen', async () => {
+  const response = await fetch(`${baseUrl.replace('/fleet', '/reports')}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reportId: '#CDO-NO-BARANGAY' })
+  });
+  const result = await response.json();
+  assert.equal(response.status, 400);
+  assert.match(result.message, /Barangay is required/);
 });
 
 test('tracks cloud image availability separately from media flags and serves stored evidence', async () => {
@@ -158,7 +190,7 @@ test('tracks cloud image availability separately from media flags and serves sto
     const missingResponse = await fetch(`${baseUrl.replace('/fleet', '/reports')}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportId: missingPhotoId, media: true })
+      body: JSON.stringify({ reportId: missingPhotoId, barangay: 'Carmen', media: true })
     });
     const missing = await missingResponse.json();
     assert.equal(missing.data.media, true);
@@ -169,6 +201,7 @@ test('tracks cloud image availability separately from media flags and serves sto
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         reportId: storedPhotoId,
+        barangay: 'Carmen',
         media: true,
         photoBase64,
         userEmail: 'evidence-test@example.com'

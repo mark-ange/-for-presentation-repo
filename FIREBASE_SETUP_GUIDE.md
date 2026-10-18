@@ -2,7 +2,7 @@
 
 ## Current Firebase configuration
 
-The Vue frontend uses the Firebase web-app configuration in `src/firebase.js`; no frontend `.env` file is required. This web configuration is public client configuration, not a server secret. Secure Firebase services with Firebase Security Rules and restrict the API key in Google Cloud.
+The Vue frontend uses the Firebase web-app configuration in `frontend/src/firebase.js`; no frontend `.env` file is required. This web configuration is public client configuration, not a server secret. Secure Firebase services with Firebase Security Rules and restrict the API key in Google Cloud.
 
 The backend Firebase Admin SDK is optional. It is only needed for backend Firebase ID-token verification, Firebase Cloud Messaging, and backend Firebase Storage/Firestore access. To enable those features, download a private service-account JSON from Firebase Console and place it at `backend/config/serviceAccountKey.json`. MongoDB-backed report storage and the admin portal do not require this key.
 
@@ -14,12 +14,12 @@ I've created all the necessary files and installed dependencies to connect your 
 
 | File | Purpose |
 |------|---------|
-| `src/firebase.js` | Firebase client configuration for Vue frontend |
+| `frontend/src/firebase.js` | Firebase client configuration for Vue frontend |
 | `backend/config/firebase.js` | Firebase Admin configuration for Node.js backend |
 | `backend/config/serviceAccountKey.json` | **PLACEHOLDER** - Replace with your real service account key |
 | `backend/middleware/firebaseMiddleware.js` | Middleware to verify Firebase tokens |
 | `backend/services/fcmService.js` | Service to send FCM push notifications |
-| `src/services/authService.js` | Frontend authentication service with Vue |
+| `frontend/src/services/authService.js` | Frontend authentication service with Vue |
 
 ### Files Modified:
 
@@ -27,9 +27,9 @@ I've created all the necessary files and installed dependencies to connect your 
 |------|---------|
 | `backend/server.js` | Added Firebase config loading |
 | `backend/middleware/authMiddleware.js` | Now supports both Firebase and JWT tokens |
-| `src/router/index.js` | Updated to support Firebase token authentication |
+| `frontend/src/router/index.js` | Updated to support Firebase token authentication |
 | `.gitignore` | Added `backend/config/serviceAccountKey.json` to exclude from Git |
-| `package.json` (main) | Added `firebase@^13.0.0` dependency |
+| `frontend/package.json` | Added `firebase@^13.0.0` dependency |
 | `package.json` (backend) | Already has `firebase` and `firebase-admin` dependencies |
 
 ---

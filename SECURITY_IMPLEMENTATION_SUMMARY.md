@@ -24,9 +24,9 @@ This document summarizes all security features implemented in the CityCare CDO p
 7. **backend/routes/dashboardRoutes.js** - Added security middleware
 8. **backend/server.js** - Enhanced security integration
 9. **backend/package.json** - Added security dependencies
-10. **index.html** - Added security meta tags
-11. **src/App.vue** - Added security features
-12. **src/services/api.js** - Added input sanitization and token validation
+10. **frontend/index.html** - Added security meta tags
+11. **frontend/src/App.vue** - Added security features
+12. **frontend/src/services/api.js** - Added input sanitization and token validation
 
 ---
 

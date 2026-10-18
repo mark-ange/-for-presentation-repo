@@ -205,7 +205,7 @@ router.get('/stats',
       };
 
       const fleetTrucks = await Fleet.find();
-      const inTransit = fleetTrucks.filter(t => t.status === 'In Transit').length;
+      const inTransit = fleetTrucks.filter(t => ['Dispatching', 'In Transit'].includes(t.status)).length;
       const idle = fleetTrucks.filter(t => t.status === 'Idle').length;
       const maintenance = fleetTrucks.filter(t => t.status === 'Maintenance').length;
 
@@ -249,7 +249,7 @@ router.get('/stats',
     const reportSummary = summarizeReports(reports);
 
     const fleet = memoryStore.fleet;
-    const inTransit = fleet.filter(t => t.status === 'In Transit').length;
+    const inTransit = fleet.filter(t => ['Dispatching', 'In Transit'].includes(t.status)).length;
     const idle = fleet.filter(t => t.status === 'Idle').length;
     const maintenance = fleet.filter(t => t.status === 'Maintenance').length;
 

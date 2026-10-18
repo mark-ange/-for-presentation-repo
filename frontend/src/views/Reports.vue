@@ -4,18 +4,23 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">Civic Analytics & Operational Reports</h1>
-        <p class="page-subtitle">Turnaround benchmarks, district density distribution, and resolution performance for CLENRO.</p>
+        <p class="page-subtitle">Turnaround benchmarks, district density distribution, and resolution performance for CLENRO. Audit period: {{ settingsState.system.reportPeriod }}.</p>
         <p v-if="errorMessage" class="text-red" role="alert">{{ errorMessage }}</p>
       </div>
 
-      <button type="button" class="btn btn-primary" @click="generateReport">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span>Export Audit Report (PDF)</span>
-      </button>
+      <div class="header-actions">
+        <button type="button" class="btn btn-secondary" :disabled="isRefreshing" @click="loadAnalytics">
+          {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button type="button" class="btn btn-primary" @click="generateReport">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>Export Audit Report (PDF)</span>
+        </button>
+      </div>
     </div>
 
     <!-- Top KPI Cards -->
@@ -156,8 +161,9 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { dashboardApi } from '../services/api'
+import { loadSettings, settingsState } from '../services/settingsStore'
 
 const reportStats = ref({
   totalReports: 0,
@@ -171,6 +177,8 @@ const barangayReports = ref([])
 const categories = ref([])
 const responseTimes = ref([])
 const errorMessage = ref('')
+const isRefreshing = ref(false)
+let refreshTimer = null
 
 const chartPoints = computed(() => {
   const width = 700
@@ -200,8 +208,10 @@ const areaPoints = computed(() => {
 })
 
 async function loadAnalytics() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
   try {
-    const res = await dashboardApi.getStats()
+    const res = await dashboardApi.getStats(settingsState.system.reportPeriod)
     if (res && res.data) {
       const d = res.data
       reportStats.value = {
@@ -225,6 +235,8 @@ async function loadAnalytics() {
   } catch (err) {
     console.error('Failed to load report analytics:', err)
     errorMessage.value = err.message || 'Unable to load report analytics.'
+  } finally {
+    isRefreshing.value = false
   }
 }
 
@@ -232,8 +244,29 @@ function generateReport() {
   window.print()
 }
 
-onMounted(() => {
-  loadAnalytics()
+watch(() => settingsState.system.reportPeriod, loadAnalytics)
+
+function updateRefreshTimer() {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = settingsState.system.autoRefresh
+    ? setInterval(() => { void loadAnalytics() }, 30000)
+    : null
+}
+
+watch(() => settingsState.system.autoRefresh, updateRefreshTimer)
+
+onMounted(async () => {
+  try {
+    await loadSettings()
+  } catch (err) {
+    console.error('Failed to load audit period preference:', err)
+  }
+  await loadAnalytics()
+  updateRefreshTimer()
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
@@ -248,6 +281,12 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .page-title {
