@@ -1,0 +1,912 @@
+<template>
+  <div class="app" :data-theme="theme">
+    <div v-if="isLoginPage" class="login-container">
+      <router-view v-slot="{ Component, route }">
+        <Transition name="route" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </Transition>
+      </router-view>
+    </div>
+    
+    <div v-else class="layout">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24">
+              <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </div>
+          <div class="brand">
+            <h1>CityCare</h1>
+            <span>Waste Management</span>
+          </div>
+        </div>
+        
+        <nav class="nav">
+          <router-link to="/dashboard" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <rect x="3" y="3" width="7" height="9"/>
+              <rect x="14" y="3" width="7" height="5"/>
+              <rect x="14" y="12" width="7" height="9"/>
+              <rect x="3" y="16" width="7" height="5"/>
+            </svg>
+            <span>Dashboard</span>
+          </router-link>
+          
+          <router-link to="/tickets" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>Incidents</span>
+            <span v-if="pendingCount > 0" class="badge">{{ pendingCount }}</span>
+          </router-link>
+          
+          <router-link to="/fleet" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <rect x="1" y="3" width="15" height="13"/>
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+            </svg>
+            <span>Fleet</span>
+          </router-link>
+          
+          <router-link to="/barangays" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+            </svg>
+            <span>Barangays</span>
+          </router-link>
+          
+          <router-link to="/reports" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            <span>Reports</span>
+          </router-link>
+
+          <router-link to="/content" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              <path d="M8 7h8M8 11h8"/>
+            </svg>
+            <span>Community Content</span>
+          </router-link>
+          
+          <router-link to="/settings" class="nav-item" active-class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Settings</span>
+          </router-link>
+        </nav>
+        
+        <div class="sidebar-footer">
+          <div class="user">
+            <div class="user-avatar">{{ userInitials }}</div>
+            <div class="user-info">
+              <div class="user-name">{{ currentUser.fullName || 'Admin' }}</div>
+              <div class="user-role">{{ currentUser.role || 'Administrator' }}</div>
+            </div>
+          </div>
+          <button class="logout" @click="handleLogout" title="Sign Out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
+        </div>
+      </aside>
+      
+      <!-- Main Content -->
+      <main class="main">
+        <header class="header">
+          <div class="header-left">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                v-model="searchQuery"
+                placeholder="Search barangay, ticket ID, or truck unit..."
+                @keyup.enter="handleSearch"
+              />
+            </div>
+          </div>
+          <div class="header-right">
+            <button class="theme-toggle" @click="toggleTheme" :title="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'" :aria-label="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+              <svg v-if="theme === 'light'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            </button>
+            <div class="time">{{ currentTime }}</div>
+          </div>
+        </header>
+        
+        <div class="content">
+          <router-view v-slot="{ Component, route }">
+            <Transition name="route" mode="out-in">
+              <component :is="Component" :key="route.path" />
+            </Transition>
+          </router-view>
+        </div>
+      </main>
+    </div>
+    <div v-if="adminAlert" class="admin-alert" role="status" aria-live="polite">
+      <div>
+        <strong>{{ adminAlert.title }}</strong>
+        <p>{{ adminAlert.body }}</p>
+      </div>
+      <button type="button" aria-label="Dismiss alert" @click="adminAlert = null">×</button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { authApi, dashboardApi, getAuthToken, getAuthTokenExpiration, reportsApi } from './services/api'
+import { adminAlert, loadSettings, publishAdminAlert, settingsState } from './services/settingsStore'
+
+const route = useRoute()
+const router = useRouter()
+
+const isLoginPage = computed(() => route.path === '/login' || route.path === '/')
+const searchQuery = ref('')
+const pendingCount = ref(0)
+const currentTime = ref('')
+let clockTimer = null
+let pollTimer = null
+let previousReportStatuses = null
+let backgroundTaskRunning = false
+
+// Theme management
+const theme = ref(localStorage.getItem('theme') || 'dark')
+
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  localStorage.setItem('theme', theme.value)
+  updateHtmlTheme()
+}
+
+function updateHtmlTheme() {
+  document.documentElement.setAttribute('data-theme', theme.value)
+}
+
+// Watch for theme changes
+watch(theme, () => {
+  updateHtmlTheme()
+})
+
+const currentUser = ref({
+  fullName: '',
+  role: ''
+})
+
+async function loadAdminProfile() {
+  if (!getAuthToken()) return
+  try {
+    const response = await authApi.getProfile()
+    currentUser.value = response.data
+  } catch (err) {
+    console.error('Failed to load administrator profile:', err)
+  }
+}
+
+watch(() => route.path, () => {
+  if (getAuthToken()) {
+    void initializeAdminSession()
+  } else if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+    previousReportStatuses = null
+  }
+})
+
+const userInitials = computed(() => {
+  const name = currentUser.value.fullName || 'Admin'
+  const parts = name.trim().split(' ')
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+})
+
+function updateClock() {
+  const now = new Date()
+  currentTime.value = now.toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+async function fetchStats() {
+  try {
+    const response = await dashboardApi.getStats()
+    pendingCount.value = response.data.pending
+    if (settingsState.system.autoRefresh) {
+      processReportNotifications(response.data.reportChanges || [])
+    }
+  } catch (err) {
+    console.error('Failed to refresh pending report count:', err)
+  }
+}
+
+function processReportNotifications(reports) {
+  const enabled = settingsState.notifications
+  if (!enabled.newReports && !enabled.dispatch && !enabled.resolution) {
+    previousReportStatuses = null
+    return
+  }
+
+  const currentStatuses = new Map(reports.map(report => [
+    report.reportId || report.id || report._id,
+    String(report.status || '').toUpperCase().replace(/[\s-]+/g, '_')
+  ]).filter(([id]) => id))
+
+  if (previousReportStatuses) {
+    for (const report of reports) {
+      const id = report.reportId || report.id || report._id
+      const status = String(report.status || '').toUpperCase().replace(/[\s-]+/g, '_')
+      const previousStatus = previousReportStatuses.get(id)
+      const location = report.barangay ? `Brgy. ${report.barangay}` : 'a covered barangay'
+      if (previousStatus === undefined && enabled.newReports) {
+        publishAdminAlert('New incident report', `${report.reportId || 'A report'} was submitted from ${location}.`)
+      } else if (previousStatus !== status && enabled.dispatch &&
+        ['ASSIGNED', 'IN_PROGRESS'].includes(status)) {
+        publishAdminAlert('Dispatch status updated', `${report.reportId || 'A report'} is now ${status.replace('_', ' ').toLowerCase()}.`)
+      } else if (previousStatus !== status && enabled.resolution && status === 'RESOLVED') {
+        publishAdminAlert('Incident resolved', `${report.reportId || 'A report'} from ${location} was marked resolved.`)
+      }
+    }
+  }
+  previousReportStatuses = currentStatuses
+}
+
+async function pollReportNotifications() {
+  const enabled = settingsState.notifications
+  if (!enabled.newReports && !enabled.dispatch && !enabled.resolution) {
+    previousReportStatuses = null
+    return
+  }
+
+  try {
+    const response = await reportsApi.getAll({ page: 1, limit: 1000 })
+    processReportNotifications(response.data || [])
+  } catch (err) {
+    console.error('Failed to check report notifications:', err)
+  }
+}
+
+async function runBackgroundTasks(initialLoad = false) {
+  if (backgroundTaskRunning) return
+  backgroundTaskRunning = true
+  try {
+    if (initialLoad || settingsState.system.autoRefresh) await fetchStats()
+    if (!settingsState.system.autoRefresh) await pollReportNotifications()
+  } finally {
+    backgroundTaskRunning = false
+  }
+}
+
+async function initializeAdminSession() {
+  await Promise.all([loadAdminProfile(), loadSettings(true).catch(err => {
+    console.error('Failed to load administrator preferences:', err)
+  })])
+  await runBackgroundTasks(true)
+  if (!pollTimer) pollTimer = setInterval(() => { void runBackgroundTasks() }, 10000)
+}
+
+function handleSearch() {
+  if (searchQuery.value.trim()) {
+    router.push({ path: '/tickets', query: { q: searchQuery.value.trim() } })
+  }
+}
+
+function handleLogout() {
+  authApi.logout()
+  
+  // Clear any session data
+  sessionStorage.clear()
+  
+  router.push('/login')
+}
+
+// Security: Auto-logout on token expiration
+const checkTokenExpiration = () => {
+  const token = localStorage.getItem('citycare_admin_token')
+  if (token) {
+    const expirationTime = getAuthTokenExpiration()
+    if (!expirationTime) {
+      handleLogout()
+      return true
+    }
+
+    const timeRemaining = expirationTime - Date.now()
+    if (timeRemaining <= 5 * 60 * 1000) {
+      console.warn('Session will expire soon')
+    }
+  }
+  return false
+}
+
+// Check token every minute
+let tokenCheckInterval = null
+
+onMounted(() => {
+  updateClock()
+  clockTimer = setInterval(updateClock, 1000)
+
+  if (getAuthToken()) {
+    void initializeAdminSession()
+  }
+  
+  // Start token expiration check
+  checkTokenExpiration()
+  tokenCheckInterval = setInterval(checkTokenExpiration, 60000)
+  
+  updateHtmlTheme()
+})
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
+  if (pollTimer) clearInterval(pollTimer)
+  if (tokenCheckInterval) clearInterval(tokenCheckInterval)
+})
+
+const handleProfileUpdated = () => { void loadAdminProfile() }
+window.addEventListener('admin-profile-updated', handleProfileUpdated)
+onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProfileUpdated))
+</script>
+
+<style scoped>
+.app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.admin-alert {
+  position: fixed;
+  z-index: 3000;
+  right: 24px;
+  top: 76px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  box-shadow: var(--shadow-lg);
+}
+
+.admin-alert p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-alert button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.login-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 224px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 68px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--brand-surface);
+}
+
+.logo {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.logo svg {
+  width: 20px;
+  height: 20px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.brand span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.nav {
+  flex: 1;
+  padding: 14px 8px;
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 3px 0;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: all 0.15s ease;
+  border-radius: 8px;
+}
+
+.nav-item:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-main);
+}
+
+.nav-item.active {
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(22, 131, 68, 0.18);
+}
+
+.nav-item svg {
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.badge {
+  background: var(--primary);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 10px;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.user-role {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.logout {
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface);
+  border: none;
+  color: var(--text-secondary);
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.logout:hover {
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.logout svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--bg-sidebar);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  width: 320px;
+  transition: border-color 0.15s ease;
+}
+
+.search:focus-within {
+  border-color: var(--primary);
+}
+
+.search svg {
+  color: var(--text-muted);
+  width: 14px;
+  height: 14px;
+}
+
+.search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.search input::placeholder {
+  color: var(--text-dim);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  padding: 6px 11px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-primary svg {
+  width: 14px;
+  height: 14px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 22px 24px;
+  background: var(--bg-app);
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 196px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  .sidebar-header {
+    padding-inline: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    width: 64px;
+  }
+
+  .sidebar-header {
+    justify-content: center;
+    padding: 14px 8px;
+  }
+
+  .brand,
+  .user-info {
+    display: none;
+  }
+
+  .nav-item {
+    position: relative;
+    justify-content: center;
+    padding: 12px 8px;
+  }
+
+  .nav-item > span:not(.badge) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+  }
+
+  .sidebar-footer {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 4px;
+  }
+
+  .user {
+    justify-content: center;
+  }
+
+  .header {
+    padding: 0 12px;
+  }
+
+  .search {
+    width: min(320px, 52vw);
+  }
+
+  .content {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    order: 2;
+    width: 100%;
+    height: auto;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .sidebar-header,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .nav {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px max(6px, env(safe-area-inset-bottom));
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    position: relative;
+    display: flex;
+    flex: 0 0 68px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-height: 54px;
+    margin: 0;
+    padding: 6px 4px;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .nav-item > span:not(.badge) {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+  }
+
+  .nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .badge {
+    position: absolute;
+    top: 2px;
+    right: 10px;
+  }
+
+  .main {
+    min-height: 0;
+  }
+
+  .header {
+    flex: 0 0 52px;
+  }
+
+  .content {
+    min-height: 0;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .header {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .search {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .search input {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .search input::placeholder {
+    color: transparent;
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+
+  .time {
+    display: none;
+  }
+}
+</style>

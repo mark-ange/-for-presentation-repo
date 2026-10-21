@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Firebase Service Account Key - KEEP THIS SECRET
+backend/config/serviceAccountKey.json
+backend/config/developmentSecrets.json
+
+# Environment files - never commit local values
+.env
+**/.env
+**/.env.*
+!**/.env.example
+backend/atlas-credentials.env
