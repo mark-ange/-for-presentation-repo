@@ -2,6 +2,8 @@
 
 CityCare CDO is a Vue 3 admin portal backed by an Express API and MongoDB.
 
+The resident Android app is included in [`resident-android-app/`](resident-android-app/README.md) and can be opened and built independently in Android Studio.
+
 ## Data ownership
 
 Operational records (reports, fleet vehicles, barangays, and collection schedules), administrator profile details, and administrative preferences are served and persisted by the backend. The frontend reads and writes these records through `/api`; it does not contain operational sample records. Analytics are calculated from stored reports, and response-time reporting starts once a report has an assignment timestamp.
@@ -72,7 +74,7 @@ To add the prepared example set (10 published posts and 4 drafts for each conten
 
 The resident app can load published content using `GET /api/content?type=recycle`, with `event`, `tip`, or `blog` as the other supported `type` values. Omitting `type` returns all published content. Each item includes an optional `sourceUrl` and an `images` array with URLs relative to the API host; append each image URL to the API host to display it in the resident app. The public image endpoint only serves images for published content. Admin management uses `GET /api/content/manage` and the standard authenticated `POST /api/content`, `PUT /api/content/:id`, and `DELETE /api/content/:id` endpoints. The resident app must call the published-content endpoint to display these records.
 
-In the Android resident app, open `sourceUrl` in an embedded WebView so the user stays in the app. Only navigate to HTTPS URLs, disable file/content access and mixed content, and provide an in-app back/close control. The Android app code is separate from this admin/backend repository and must be wired to the content API and WebView.
+In the Android resident app, open `sourceUrl` in an embedded WebView so the user stays in the app. Only navigate to HTTPS URLs, disable file/content access and mixed content, and provide an in-app back/close control. The app code is in `resident-android-app/` and must be wired to the content API and WebView.
 
 For resident testing, the backend can serve the debug APK from `GET /download/citycare.apk` when `CITYCARE_ANDROID_APK_PATH` points to the built APK in the local backend environment. Anyone who can reach the backend can download this test build; the link works only while the backend is running and reachable. Use a properly signed release build and hosted distribution for production.
 
@@ -112,7 +114,7 @@ For local use, run the backend on the computer and point the Android app at that
 
 1. Start the API from the repository root with `npm --prefix backend start` (or, from the `backend` folder, `npm start`). Keep the terminal open.
 2. On Windows, run `ipconfig` and find the IPv4 address for the Wi-Fi adapter connected to the same network as the phone (for example, `192.168.1.50`).
-3. In the separate Android project, set `CityCareApiService.kt`'s base URL to `http://<COMPUTER_IP>:5000/api/`. For an Android emulator on this computer, use `http://10.0.2.2:5000/api/`.
+3. In `resident-android-app/`, set `CityCareApiService.kt`'s base URL to `http://<COMPUTER_IP>:5000/api/`. For an Android emulator on this computer, use `http://10.0.2.2:5000/api/`.
 4. Allow Node.js or inbound TCP port 5000 on the Windows Firewall for **Private networks**. Do not expose this development HTTP server to the public internet.
 5. Connect the phone and computer to the same Wi-Fi, then open `http://<COMPUTER_IP>:5000/api/health` in the phone browser. Continue when it returns `ONLINE` and `CONNECTED`.
 6. Build/install the Android app with the updated URL. Submit a test report and check the admin portal's **Incidents** page. Keep the computer awake and the backend running while reports need to be received.
