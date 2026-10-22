@@ -2,8 +2,8 @@
  * Firebase Configuration for CityCare Admin Portal
  * This connects the Vue frontend to Firebase services
  *
- * Firebase web app configuration is public client configuration and is kept
- * here so local development does not depend on a frontend .env file.
+ * Firebase web app configuration is public client configuration. Vite embeds
+ * these values into the browser bundle, so they must not be treated as secrets.
  */
 
 import { initializeApp } from 'firebase/app';
@@ -12,16 +12,22 @@ import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, deleteDoc, qu
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
-// Firebase web app configuration for CityCare CDO.
 const firebaseConfig = {
-  apiKey: 'AIzaSyCWKir9iFOeqZsKfM8BHUNbSpzk8E0RaqQ',
-  authDomain: 'citycarecdo.firebaseapp.com',
-  projectId: 'citycarecdo',
-  storageBucket: 'citycarecdo.firebasestorage.app',
-  messagingSenderId: '705374451507',
-  appId: '1:705374451507:web:123048017eb27cacc0b046',
-  measurementId: 'G-ZN3H2TTJZ1'
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
+const missingFirebaseConfig = Object.entries(firebaseConfig)
+  .filter(([key, value]) => key !== 'measurementId' && !value)
+  .map(([key]) => key);
+if (missingFirebaseConfig.length > 0) {
+  throw new Error(`Missing Firebase web configuration: ${missingFirebaseConfig.join(', ')}. Set the VITE_FIREBASE_* values in frontend/.env.local.`);
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -102,9 +108,8 @@ export const requestFCMPermission = async () => {
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      const token = await getToken(messaging, {
-        vapidKey: 'YOUR_VAPID_KEY'
-      });
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+      const token = await getToken(messaging, vapidKey ? { vapidKey } : undefined);
       return token;
     }
     return null;

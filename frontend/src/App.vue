@@ -1,7 +1,11 @@
 <template>
   <div class="app" :data-theme="theme">
     <div v-if="isLoginPage" class="login-container">
-      <router-view />
+      <router-view v-slot="{ Component, route }">
+        <Transition name="route" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </Transition>
+      </router-view>
     </div>
     
     <div v-else class="layout">
@@ -117,7 +121,7 @@
             </div>
           </div>
           <div class="header-right">
-            <button class="theme-toggle" @click="toggleTheme" :title="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+            <button class="theme-toggle" @click="toggleTheme" :title="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'" :aria-label="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
               <svg v-if="theme === 'light'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
               </svg>
@@ -138,7 +142,11 @@
         </header>
         
         <div class="content">
-          <router-view />
+          <router-view v-slot="{ Component, route }">
+            <Transition name="route" mode="out-in">
+              <component :is="Component" :key="route.path" />
+            </Transition>
+          </router-view>
         </div>
       </main>
     </div>
@@ -426,7 +434,7 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
 
 /* Sidebar */
 .sidebar {
-  width: 240px;
+  width: 224px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
@@ -438,14 +446,16 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 18px 20px;
+  min-height: 68px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--border);
+  background: var(--brand-surface);
 }
 
 .logo {
   width: 36px;
   height: 36px;
-  background: var(--primary);
+  background: rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -462,41 +472,42 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  color: #ffffff;
   letter-spacing: -0.01em;
 }
 
 .brand span {
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .nav {
   flex: 1;
-  padding: 12px 0;
+  padding: 14px 8px;
   overflow-y: auto;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
+  gap: 11px;
+  margin: 3px 0;
+  padding: 10px 12px;
   color: var(--text-secondary);
   font-size: 13px;
   transition: all 0.15s ease;
-  border-left: 3px solid transparent;
+  border-radius: 8px;
 }
 
 .nav-item:hover {
-  background: var(--bg-surface);
+  background: var(--bg-sidebar-hover);
   color: var(--text-main);
 }
 
 .nav-item.active {
-  background: var(--primary-subtle);
-  color: var(--primary);
-  border-left-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(22, 131, 68, 0.18);
 }
 
 .nav-item svg {
@@ -505,7 +516,7 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
 }
 
 .badge {
-  background: var(--danger);
+  background: var(--primary);
   color: white;
   font-size: 10px;
   font-weight: 600;
@@ -558,12 +569,16 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
 }
 
 .logout {
-  background: none;
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface);
   border: none;
-  color: var(--text-muted);
-  padding: 6px;
+  color: var(--text-secondary);
+  width: 34px;
+  height: 34px;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
+  transition: all 0.15s ease;
 }
 
 .logout:hover {
@@ -667,7 +682,7 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
   font-size: 12px;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  padding: 6px 10px;
+  padding: 6px 11px;
   background: var(--bg-surface);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
@@ -703,17 +718,21 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 20px;
+  padding: 22px 24px;
   background: var(--bg-app);
 }
 
 @media (max-width: 900px) {
   .sidebar {
-    width: 200px;
+    width: 196px;
   }
 
   .content {
     padding: 16px;
+  }
+
+  .sidebar-header {
+    padding-inline: 14px;
   }
 }
 
@@ -773,6 +792,121 @@ onUnmounted(() => window.removeEventListener('admin-profile-updated', handleProf
 
   .content {
     padding: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    order: 2;
+    width: 100%;
+    height: auto;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .sidebar-header,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .nav {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px max(6px, env(safe-area-inset-bottom));
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    position: relative;
+    display: flex;
+    flex: 0 0 68px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-height: 54px;
+    margin: 0;
+    padding: 6px 4px;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .nav-item > span:not(.badge) {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+  }
+
+  .nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .badge {
+    position: absolute;
+    top: 2px;
+    right: 10px;
+  }
+
+  .main {
+    min-height: 0;
+  }
+
+  .header {
+    flex: 0 0 52px;
+  }
+
+  .content {
+    min-height: 0;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .header {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .search {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .search input {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .search input::placeholder {
+    color: transparent;
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+
+  .time {
+    display: none;
   }
 }
 </style>

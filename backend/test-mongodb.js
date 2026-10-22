@@ -1,55 +1,37 @@
 /**
- * Test MongoDB Connection
- * Run: node test-mongodb.js
+ * Test the configured MongoDB connection.
+ * Run from any directory with: node backend/test-mongodb.js
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const mongoose = require('mongoose');
+const mongoURI = process.env.MONGO_URI
+  || process.env.MONGODB_URI
+  || process.env.MONGO_URI_DIRECT
+  || process.env.MONGODB_URI_DIRECT;
 
-console.log('🔍 MongoDB Connection Test');
-console.log('=========================\n');
-
-const mongoURI = process.env.MONGO_URI;
-
-if (!mongoURI) {
-  console.error('❌ MONGO_URI not found in .env file');
-  console.log('MONGO_URI=mongodb+srv://User-1:ob6T5RvYjtss2gMm@citycarecluster.xxxx.mongodb.net/your_database_name?retryWrites=true&w=majority');
+if (!mongoURI || mongoURI.includes('<db_username>') || mongoURI.includes('******')) {
+  console.error('MongoDB URI is not configured. Set MONGO_URI or MONGODB_URI in backend/.env.');
   process.exit(1);
 }
 
-console.log('📋 Configuration:');
-console.log('  - MONGO_URI:', mongoURI.split('@')[0] + '@...');
-console.log('  - PORT:', process.env.PORT || 5000);
-console.log('  - NODE_ENV:', process.env.NODE_ENV || 'development');
-console.log('');
-
 const connectDB = async () => {
   try {
-    console.log('🔗 Connecting to MongoDB Atlas...');
-    
-    const conn = await mongoose.connect(mongoURI, {
-      serverSelectionTimeoutMS: 5000
+    console.log('Connecting to MongoDB...');
+    const connection = await mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 5000,
     });
-    
-    console.log('✅ MongoDB Connected Successfully!');
-    console.log(`   Host: ${conn.connection.host}`);
-    console.log(`   Database: ${conn.connection.name}`);
-    console.log('');
-    console.log('🎉 Connection test PASSED!');
-    
+
+    console.log('MongoDB connection test passed.');
+    console.log(`Host: ${connection.connection.host}`);
+    console.log(`Database: ${connection.connection.name}`);
     await mongoose.disconnect();
-    process.exit(0);
   } catch (error) {
-    console.error('❌ MongoDB Connection FAILED');
-    console.error(`   Error: ${error.message}`);
-    console.log('');
-    console.log('🔧 Troubleshooting Steps:');
-    console.log('   1. Check your MongoDB Atlas connection string');
-    console.log('   2. Verify your IP is whitelisted in MongoDB Atlas');
-    console.log('   3. Ensure the password is correct');
-    console.log('   4. Check network connectivity (can you ping google.com?)');
-    console.log('   5. Verify the cluster name is correct');
-    process.exit(1);
+    console.error('MongoDB connection test failed:', error.message);
+    process.exitCode = 1;
+    await mongoose.disconnect();
   }
 };
 

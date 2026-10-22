@@ -1,11 +1,11 @@
 <template>
-  <section class="content-page">
+  <section class="content-page admin-page">
     <header class="page-header">
       <div>
         <h1>Community Content</h1>
         <p>Manage resident-facing recycling information, events, tips, and blog posts.</p>
       </div>
-      <button class="primary-button" type="button" @click="openCreateForm">Add content</button>
+      <button class="btn btn-primary" type="button" @click="openCreateForm">Add content</button>
     </header>
 
     <div class="content-toolbar">
@@ -22,7 +22,7 @@
           {{ item.label }}
         </button>
       </div>
-      <button class="secondary-button" type="button" :disabled="isLoading" @click="loadContent">
+      <button class="btn btn-secondary" type="button" :disabled="isLoading" @click="loadContent">
         {{ isLoading ? 'Refreshing...' : 'Refresh' }}
       </button>
     </div>
@@ -49,8 +49,8 @@
               <h2>{{ record.title }}</h2>
             </div>
             <div class="record-actions">
-              <button class="secondary-button" type="button" :disabled="isLoadingImages" @click="openEditForm(record)">Edit</button>
-              <button class="delete-button" type="button" :disabled="deletingId === record._id" @click="deleteRecord(record)">
+              <button class="btn btn-secondary btn-sm" type="button" :disabled="isLoadingImages" @click="openEditForm(record)">Edit</button>
+              <button class="btn btn-danger btn-sm" type="button" :disabled="deletingId === record._id" @click="deleteRecord(record)">
                 {{ deletingId === record._id ? 'Deleting...' : 'Delete' }}
               </button>
             </div>
@@ -77,57 +77,57 @@
             <h2>{{ editingRecord ? 'Edit content' : 'Add content' }}</h2>
             <p>Fields marked required must be filled in before saving.</p>
           </div>
-          <button class="close-button" type="button" aria-label="Close form" @click="closeForm">×</button>
+          <button class="modal-close" type="button" aria-label="Close form" @click="closeForm">×</button>
         </div>
 
         <p v-if="formError" class="notice error-notice" role="alert">{{ formError }}</p>
 
         <label class="form-field">
           <span>Content type <b aria-hidden="true">*</b></span>
-          <select v-model="form.type" :disabled="Boolean(editingRecord)" required>
+          <select v-model="form.type" :disabled="Boolean(editingRecord)" required class="form-input">
             <option v-for="item in contentTypes.slice(1)" :key="item.value" :value="item.value">{{ item.label }}</option>
           </select>
         </label>
 
         <label class="form-field">
           <span>Title <b aria-hidden="true">*</b></span>
-          <input v-model.trim="form.title" maxlength="140" required />
+          <input v-model.trim="form.title" maxlength="140" required class="form-input" />
         </label>
 
         <label class="form-field">
           <span>Short description</span>
-          <textarea v-model.trim="form.summary" rows="2" maxlength="300"></textarea>
+          <textarea v-model.trim="form.summary" rows="2" maxlength="300" class="form-input"></textarea>
         </label>
 
         <label class="form-field">
           <span>Details <b aria-hidden="true">*</b></span>
-          <textarea v-model.trim="form.body" rows="6" maxlength="12000" required></textarea>
+          <textarea v-model.trim="form.body" rows="6" maxlength="12000" required class="form-input"></textarea>
         </label>
 
         <label class="form-field">
           <span>Source / more information link</span>
-          <input v-model.trim="form.sourceUrl" type="url" placeholder="https://..." />
+          <input v-model.trim="form.sourceUrl" type="url" placeholder="https://..." class="form-input" />
           <small>Residents can open this link in an in-app browser. Use an HTTPS link.</small>
         </label>
 
         <label class="form-field">
           <span>Image URL</span>
-          <input v-model.trim="form.imageUrl" type="url" placeholder="https://example.com/image.jpg" />
+          <input v-model.trim="form.imageUrl" type="url" placeholder="https://example.com/image.jpg" class="form-input" />
           <small>Optional direct HTTPS link to an image. Residents will see it in the content card.</small>
         </label>
 
         <template v-if="form.type === 'event'">
           <label class="form-field">
             <span>Starts <b aria-hidden="true">*</b></span>
-            <input v-model="form.eventStartAt" type="datetime-local" required />
+            <input v-model="form.eventStartAt" type="datetime-local" required class="form-input" />
           </label>
           <label class="form-field">
             <span>Ends</span>
-            <input v-model="form.eventEndAt" type="datetime-local" />
+            <input v-model="form.eventEndAt" type="datetime-local" class="form-input" />
           </label>
           <label class="form-field">
             <span>Location <b aria-hidden="true">*</b></span>
-            <input v-model.trim="form.location" maxlength="240" required />
+            <input v-model.trim="form.location" maxlength="240" required class="form-input" />
           </label>
         </template>
 
@@ -139,6 +139,7 @@
             multiple
             :disabled="isLoadingImages || isSaving"
             @change="handleImageSelection"
+            class="form-input"
           />
           <small>JPEG, PNG, or WebP. Up to 5 images and 8 MB total; each file can be up to 2 MB.</small>
           <small v-if="isLoadingImages">Loading attached image previews...</small>
@@ -146,7 +147,7 @@
             <div v-for="image in visibleImages" :key="image.id" class="gallery-image">
               <img :src="image.previewUrl" :alt="image.name" />
               <span :title="image.name">{{ image.name }}</span>
-              <button type="button" :disabled="isSaving" @click="removeImage(image)">
+              <button type="button" :disabled="isSaving" @click="removeImage(image)" class="btn btn-danger btn-sm">
                 {{ image.existing ? 'Remove' : 'Cancel' }}
               </button>
             </div>
@@ -156,15 +157,15 @@
 
         <label class="form-field">
           <span>Visibility</span>
-          <select v-model="form.status">
+          <select v-model="form.status" class="form-input">
             <option value="draft">Draft — only visible to admins</option>
             <option value="published">Published — visible from the public API</option>
           </select>
         </label>
 
         <div class="form-actions">
-          <button class="secondary-button" type="button" :disabled="isSaving" @click="closeForm">Cancel</button>
-          <button class="primary-button" type="submit" :disabled="isSaving || isLoadingImages">
+          <button class="btn btn-secondary" type="button" :disabled="isSaving" @click="closeForm">Cancel</button>
+          <button class="btn btn-primary" type="submit" :disabled="isSaving || isLoadingImages">
             {{ isSaving ? 'Saving...' : editingRecord ? 'Save changes' : 'Create content' }}
           </button>
         </div>
@@ -502,54 +503,20 @@ onUnmounted(releaseImagePreviews)
 .page-header h1 {
   margin: 0;
   color: var(--text-main);
-  font-size: 25px;
+  font-size: 22px;
 }
 
 .page-header p,
 .form-heading p {
   margin: 6px 0 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 14px;
-}
-
-.primary-button,
-.secondary-button,
-.delete-button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 9px 13px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.primary-button {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: #fff;
-}
-
-.secondary-button {
-  background: var(--bg-surface);
-  color: var(--text-main);
-}
-
-.delete-button {
-  border-color: #dc2626;
-  background: transparent;
-  color: #dc2626;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
 }
 
 .content-toolbar {
   flex-wrap: wrap;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .type-tabs {
@@ -562,7 +529,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 8px 13px;
-  background: transparent;
+  background: var(--bg-surface);
   color: var(--text-dim);
   font: inherit;
   font-size: 13px;
@@ -571,26 +538,26 @@ button:disabled {
 
 .type-tabs button.selected {
   border-color: var(--primary);
-  background: var(--primary-light);
+  background: var(--primary-subtle);
   color: var(--primary);
   font-weight: 700;
 }
 
 .notice {
   margin: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 11px 13px;
   font-size: 13px;
 }
 
 .error-notice {
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .success-notice {
-  background: rgba(22, 163, 74, 0.1);
-  color: #16a34a;
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .empty-state {
@@ -600,9 +567,9 @@ button:disabled {
   justify-content: center;
   flex-direction: column;
   gap: 8px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  color: var(--text-dim);
+  border: 1px dashed var(--border-muted);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -619,9 +586,10 @@ button:disabled {
   display: flex;
   gap: 16px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .record-image {
@@ -653,20 +621,20 @@ button:disabled {
   border-radius: 999px;
   padding: 4px 9px;
   background: var(--bg-input);
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   text-transform: capitalize;
 }
 
 .status-published {
-  background: rgba(22, 163, 74, 0.12);
-  color: #16a34a;
+  background: var(--status-resolved-bg);
+  color: var(--status-resolved);
 }
 
 .status-draft {
-  background: rgba(234, 179, 8, 0.13);
-  color: #ca8a04;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .record-heading h2 {
@@ -682,7 +650,7 @@ button:disabled {
 .record-summary,
 .record-body,
 .event-details {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -719,7 +687,7 @@ button:disabled {
 }
 
 .record-main small {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -740,8 +708,8 @@ button:disabled {
   width: min(100%, 620px);
   max-height: calc(100vh - 48px);
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   padding: 22px;
   background: var(--bg-surface);
   color: var(--text-main);
@@ -749,6 +717,8 @@ button:disabled {
 
 .form-heading {
   align-items: flex-start;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .form-heading h2 {
@@ -756,12 +726,16 @@ button:disabled {
   font-size: 20px;
 }
 
-.close-button {
+.modal-close {
   border: 0;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 25px;
   cursor: pointer;
+}
+
+.modal-close:hover {
+  color: var(--text-main);
 }
 
 .form-field {
@@ -773,16 +747,14 @@ button:disabled {
 }
 
 .form-field b {
-  color: #dc2626;
+  color: var(--danger);
 }
 
-.form-field input,
-.form-field textarea,
-.form-field select {
+.form-input {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
   padding: 10px;
   background: var(--bg-input);
   color: var(--text-main);
@@ -790,12 +762,22 @@ button:disabled {
   font-size: 13px;
 }
 
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
 .form-field textarea {
   resize: vertical;
 }
 
+.form-field select {
+  background: var(--bg-input);
+  color: var(--text-main);
+}
+
 .form-field small {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 400;
 }
@@ -812,8 +794,8 @@ button:disabled {
   min-width: 0;
   flex-direction: column;
   gap: 5px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
   padding: 6px;
   background: var(--bg-input);
 }
@@ -821,13 +803,13 @@ button:disabled {
 .gallery-image img {
   width: 100%;
   height: 85px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
 }
 
 .gallery-image span {
   overflow: hidden;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -837,7 +819,7 @@ button:disabled {
   border: 0;
   padding: 4px;
   background: transparent;
-  color: #dc2626;
+  color: var(--danger);
   font: inherit;
   font-size: 11px;
   cursor: pointer;

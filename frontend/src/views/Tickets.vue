@@ -1,5 +1,5 @@
 <template>
-  <div class="tickets-container">
+  <div class="tickets-container admin-page">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -49,6 +49,9 @@
         <div class="counter-progress-bg">
           <div class="counter-progress-fill" style="width: 100%"></div>
         </div>
+        <svg class="mini-sparkline" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,26 16,24 28,17 40,20 54,10 66,14 80,5 92,9 99,2" />
+        </svg>
       </div>
 
       <div
@@ -71,6 +74,9 @@
             :style="{ width: `${totalCount ? (pendingCount / totalCount) * 100 : 0}%` }"
           ></div>
         </div>
+        <svg class="mini-sparkline amber" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,21 28,24 40,14 54,17 66,9 80,13 92,5 99,2" />
+        </svg>
       </div>
 
       <div
@@ -93,6 +99,9 @@
             :style="{ width: `${totalCount ? (assignedCount / totalCount) * 100 : 0}%` }"
           ></div>
         </div>
+        <svg class="mini-sparkline blue" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,24 28,16 40,19 54,11 66,14 80,6 92,9 99,2" />
+        </svg>
       </div>
 
       <div
@@ -115,6 +124,9 @@
             :style="{ width: `${totalCount ? (inProgressCount / totalCount) * 100 : 0}%` }"
           ></div>
         </div>
+        <svg class="mini-sparkline violet" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,26 16,22 28,24 40,15 54,18 66,10 80,12 92,6 99,3" />
+        </svg>
       </div>
 
       <div
@@ -137,6 +149,9 @@
             :style="{ width: `${totalCount ? (resolvedCount / totalCount) * 100 : 0}%` }"
           ></div>
         </div>
+        <svg class="mini-sparkline green" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,25 28,18 40,20 54,11 66,14 80,7 92,9 99,2" />
+        </svg>
       </div>
 
       <div
@@ -159,6 +174,9 @@
             :style="{ width: `${totalCount ? (rejectedCount / totalCount) * 100 : 0}%` }"
           ></div>
         </div>
+        <svg class="mini-sparkline red" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,23 28,25 40,16 54,18 66,11 80,14 92,6 99,3" />
+        </svg>
       </div>
     </div>
     <p v-if="activeStatusFilter || search || barangay || category" class="filter-summary">
@@ -616,7 +634,7 @@ const assignment = ref({
 
 const fleet = ref([])
 const availableFleet = computed(() => fleet.value.filter(truck =>
-  String(truck.status || '').toLowerCase() !== 'maintenance'
+  !['maintenance', 'out of service'].includes(String(truck.status || '').trim().toLowerCase())
 ))
 
 function parseReportCoordinates(value) {
@@ -665,6 +683,7 @@ watch(reportMapCoordinates, async coordinates => {
 
   if (!reportMapInstance) {
     reportMapInstance = L.map(reportMapContainer.value, { scrollWheelZoom: false })
+    reportMapInstance.attributionControl.setPrefix(false)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -952,7 +971,7 @@ async function saveStatusAndDispatch() {
     return
   }
   if (currentUnitIsUnavailable.value && assignment.value.unitAssigned !== 'custom') {
-    dispatchValidationError.value = 'The assigned collection unit is in maintenance. Select an available unit or enter a custom unit.'
+    dispatchValidationError.value = 'The assigned collection unit is unavailable. Select an available unit or enter a custom unit.'
     saveNotification.value = null
     isSaving.value = false
     return
@@ -997,9 +1016,16 @@ function updateTicketRefreshTimer() {
     : null
 }
 
+function refreshTicketsWhenVisible() {
+  if (document.visibilityState === 'visible') {
+    void fetchTickets(true)
+  }
+}
+
 watch(() => settingsState.system.autoRefresh, updateTicketRefreshTimer)
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', refreshTicketsWhenVisible)
   try {
     await loadSettings()
   } catch (err) {
@@ -1038,6 +1064,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
   if (filterTimer) clearTimeout(filterTimer)
+  document.removeEventListener('visibilitychange', refreshTicketsWhenVisible)
   disposeReportMap()
 })
 </script>
@@ -1057,7 +1084,7 @@ onUnmounted(() => {
 
 .page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-main);
@@ -1120,7 +1147,7 @@ onUnmounted(() => {
 
 .btn-primary {
   background-color: var(--primary);
-  color: #04140a;
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -1273,7 +1300,8 @@ onUnmounted(() => {
 .table-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
   overflow: clip;
 }
 
@@ -1434,7 +1462,7 @@ onUnmounted(() => {
 
 .dispatch-btn:hover {
   background-color: var(--primary);
-  color: #04140a;
+  color: #ffffff;
 }
 
 .text-right {
@@ -1533,7 +1561,7 @@ onUnmounted(() => {
 }
 
 .media-indicator:hover .media-icon {
-  color: #04140a;
+  color: #ffffff;
 }
 
 /* ========================================================

@@ -1,5 +1,5 @@
 <template>
-  <div class="fleet-container">
+  <div class="fleet-container admin-page">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -65,7 +65,7 @@
     <div ref="mapCardContainer" class="map-card">
       <div class="map-header">
         <div>
-          <h2 class="panel-title">Live Fleet & Incident Map</h2>
+          <h2 class="panel-title">Fleet & Incident Map</h2>
           <span class="panel-subtitle">OpenStreetMap • Refreshes every 15 seconds</span>
         </div>
 
@@ -110,7 +110,7 @@
       </div>
 
       <p class="map-note">
-        Trucks stay individually visible above the map; incident reports cluster when nearby. Click a truck to inspect it or a report cluster to explore reports. Drag the zoom slider or use + / − for precise control.
+        Idle trucks are hidden from the map. When dispatching a truck, choose its map location from the status control, then click the map to set its position. Other positions are approximate unless marked Live GPS.
       </p>
 
       <div v-if="selectedReport && closestTruck" class="closest-truck-panel">
@@ -164,7 +164,16 @@
                 <option v-for="status in fleetStatuses" :key="status" :value="status">{{ status }}</option>
               </select>
               <button
-                v-if="pendingTruckStatuses[selectedTruck.id]"
+                v-if="['Dispatching', 'In Transit'].includes(pendingTruckStatuses[selectedTruck.id] || selectedTruck.status)"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="isStatusSaving(selectedTruck.id)"
+                @click="beginLocationPick(selectedTruck)"
+              >
+                {{ locationPickingTruckId === selectedTruck.id ? 'Click map to place truck…' : 'Choose map location' }}
+              </button>
+              <button
+                v-if="pendingTruckStatuses[selectedTruck.id] || pendingTruckLocations[selectedTruck.id]"
                 type="button"
                 class="btn btn-primary btn-sm"
                 :disabled="isStatusSaving(selectedTruck.id)"
@@ -178,11 +187,22 @@
                 :class="truckStatusFeedback[selectedTruck.id].type"
                 role="status"
               >{{ truckStatusFeedback[selectedTruck.id].message }}</span>
+              <span v-if="pendingTruckLocations[selectedTruck.id]" class="status-feedback pending">
+                Selected: {{ formatCoordinates(pendingTruckLocations[selectedTruck.id]) }}
+              </span>
             </div>
           </div>
           <div class="inspector-item">
             <span class="item-label">Location source</span>
-            <strong class="item-val">{{ selectedTruck.locationSource === 'gps' ? 'Live GPS' : 'Estimated barangay center' }}</strong>
+            <strong class="item-val">
+              {{ selectedTruck.locationSource === 'gps'
+                ? 'Live GPS'
+                : selectedTruck.locationSource === 'manual'
+                  ? 'Manually selected'
+                : selectedTruck.status === 'Idle'
+                  ? 'Estimated Central Depot'
+                  : 'Estimated barangay center' }}
+            </strong>
           </div>
         </div>
 
@@ -256,7 +276,16 @@
                   <option v-for="status in fleetStatuses" :key="status" :value="status">{{ status }}</option>
                 </select>
                 <button
-                  v-if="pendingTruckStatuses[truck.id]"
+                  v-if="['Dispatching', 'In Transit'].includes(pendingTruckStatuses[truck.id] || truck.status)"
+                  type="button"
+                  class="btn btn-secondary btn-sm status-update-button"
+                  :disabled="isStatusSaving(truck.id)"
+                  @click="beginLocationPick(truck)"
+                >
+                  {{ locationPickingTruckId === truck.id ? 'Click map…' : 'Pick map location' }}
+                </button>
+                <button
+                  v-if="pendingTruckStatuses[truck.id] || pendingTruckLocations[truck.id]"
                   type="button"
                   class="btn btn-primary btn-sm status-update-button"
                   :disabled="isStatusSaving(truck.id)"
@@ -270,6 +299,9 @@
                   :class="truckStatusFeedback[truck.id].type"
                   role="status"
                 >{{ truckStatusFeedback[truck.id].message }}</span>
+                <span v-if="pendingTruckLocations[truck.id]" class="status-feedback pending">
+                  {{ formatCoordinates(pendingTruckLocations[truck.id]) }}
+                </span>
               </div>
             </td>
             <td class="text-right" @click.stop>
@@ -365,6 +397,8 @@ const defaultMapCenter = [8.48, 124.64]
 const fleetStatuses = ['Idle', 'Dispatching', 'In Transit', 'Maintenance', 'Out of Service']
 const statusSavingIds = ref([])
 const pendingTruckStatuses = ref({})
+const pendingTruckLocations = ref({})
+const locationPickingTruckId = ref('')
 const truckStatusFeedback = ref({})
 
 const newTruck = ref({
@@ -382,6 +416,7 @@ const errorMessage = ref('')
 let markerClusterLayer
 let truckLayer
 let routeLayer
+let locationPickLayer
 let refreshTimer
 let mapWheelDelta = 0
 let mapWheelTimer
@@ -391,6 +426,38 @@ const reportMarkers = new Map()
 function reportLocation(report) {
   return parseMapCoordinates(report.geoLocation) ||
     parseMapCoordinates(report.gpsCoordinates || report.gps)
+}
+
+function formatCoordinates(location) {
+  return `${Number(location.latitude).toFixed(5)}, ${Number(location.longitude).toFixed(5)}`
+}
+
+function beginLocationPick(truck) {
+  locationPickingTruckId.value = truck.id
+  errorMessage.value = 'Click the map where this truck should be shown, then save its status.'
+  if (mapInstance.value) {
+    mapInstance.value.getContainer().classList.add('location-pick-mode')
+    mapInstance.value.getContainer().scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+function setPendingTruckLocation(event) {
+  const truckId = locationPickingTruckId.value
+  if (!truckId) return
+
+  const { lat, lng } = event.latlng
+  const location = { latitude: lat, longitude: lng }
+  pendingTruckLocations.value = { ...pendingTruckLocations.value, [truckId]: location }
+  locationPickingTruckId.value = ''
+  mapInstance.value?.getContainer().classList.remove('location-pick-mode')
+  errorMessage.value = ''
+  if (locationPickLayer) {
+    locationPickLayer.clearLayers()
+    L.marker([lat, lng], { icon: truckMarkerIcon('dispatching'), zIndexOffset: 2000 })
+      .bindPopup('Selected truck location')
+      .addTo(locationPickLayer)
+      .openPopup()
+  }
 }
 
 function parseMapCoordinates(value) {
@@ -454,7 +521,13 @@ function createTruckPopup(truck) {
   addText(
     content,
     'small',
-    truck.locationSource === 'gps' ? 'Live GPS location' : 'Approximate barangay-center location'
+    truck.locationSource === 'gps'
+      ? 'Live GPS location'
+      : truck.locationSource === 'manual'
+        ? 'Manually selected map location'
+      : truck.status === 'Idle'
+        ? 'Approximate Central Depot location'
+        : 'Approximate barangay-center location'
   )
   return content
 }
@@ -484,6 +557,8 @@ function renderMapLayers() {
   const visibleReportIds = new Set()
 
   for (const truck of trucks.value) {
+    if (String(truck.status || '').trim().toLowerCase() === 'idle') continue
+
     const point = truck.location && truck.location.coordinates
     if (!point || point.length !== 2) continue
     const latitude = Number(point[1])
@@ -605,15 +680,17 @@ async function initializeMap() {
     scrollWheelZoom: false,
     doubleClickZoom: true,
     touchZoom: true,
-    markerZoomAnimation: false,
+    markerZoomAnimation: true,
     keyboard: true,
     minZoom: 3,
     maxZoom: 19
   }).setView(defaultMapCenter, 12)
+  mapInstance.value.attributionControl.setPrefix(false)
   mapContainer.value.addEventListener('wheel', handleMapWheel, { passive: false })
   mapInstance.value.on('zoomend', () => {
     mapZoom.value = mapInstance.value?.getZoom() ?? mapZoom.value
   })
+  mapInstance.value.on('click', setPendingTruckLocation)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
@@ -638,6 +715,7 @@ async function initializeMap() {
     }
   }).addTo(mapInstance.value)
   routeLayer = L.layerGroup().addTo(mapInstance.value)
+  locationPickLayer = L.layerGroup().addTo(mapInstance.value)
   renderMapLayers()
   mapInstance.value.invalidateSize()
 }
@@ -873,6 +951,14 @@ function setPendingTruckStatus(truck, nextStatus) {
     pending[truck.id] = nextStatus
   }
   pendingTruckStatuses.value = pending
+  const pendingLocations = { ...pendingTruckLocations.value }
+  delete pendingLocations[truck.id]
+  pendingTruckLocations.value = pendingLocations
+  if (locationPickingTruckId.value === truck.id) {
+    locationPickingTruckId.value = ''
+    mapInstance.value?.getContainer().classList.remove('location-pick-mode')
+  }
+  locationPickLayer?.clearLayers()
   truckStatusFeedback.value = {
     ...truckStatusFeedback.value,
     [truck.id]: { type: 'pending', message: nextStatus === truck.status ? '' : 'Click Update to save this change.' }
@@ -881,8 +967,18 @@ function setPendingTruckStatus(truck, nextStatus) {
 
 async function saveTruckStatus(truck) {
   if (!truck || isStatusSaving(truck.id)) return
-  const nextStatus = pendingTruckStatuses.value[truck.id]
-  if (!nextStatus || !fleetStatuses.includes(nextStatus) || nextStatus === truck.status) return
+  const nextStatus = pendingTruckStatuses.value[truck.id] || truck.status
+  const pickedLocation = pendingTruckLocations.value[truck.id]
+  if (!fleetStatuses.includes(nextStatus) || (nextStatus === truck.status && !pickedLocation)) return
+  const isDispatching = ['Dispatching', 'In Transit'].includes(nextStatus)
+  const wasDispatching = ['Dispatching', 'In Transit'].includes(truck.status)
+  if (isDispatching && !wasDispatching && !pickedLocation) {
+    truckStatusFeedback.value = {
+      ...truckStatusFeedback.value,
+      [truck.id]: { type: 'error', message: 'Choose a map location before dispatching this truck.' }
+    }
+    return
+  }
 
   statusSavingIds.value = [...statusSavingIds.value, truck.id]
   truckStatusFeedback.value = {
@@ -890,7 +986,10 @@ async function saveTruckStatus(truck) {
     [truck.id]: { type: 'pending', message: 'Saving status…' }
   }
   try {
-    const response = await fleetApi.update(truck.id, { status: nextStatus })
+    const response = await fleetApi.update(truck.id, {
+      ...(nextStatus !== truck.status ? { status: nextStatus } : {}),
+      ...(pickedLocation ? { location: pickedLocation } : {})
+    })
     if (response?.success !== true || response.data?.status !== nextStatus) {
       throw new Error(response?.message || 'The server did not confirm the status update.')
     }
@@ -900,6 +999,10 @@ async function saveTruckStatus(truck) {
     const pending = { ...pendingTruckStatuses.value }
     delete pending[truck.id]
     pendingTruckStatuses.value = pending
+    const locations = { ...pendingTruckLocations.value }
+    delete locations[truck.id]
+    pendingTruckLocations.value = locations
+    locationPickLayer?.clearLayers()
     truckStatusFeedback.value = {
       ...truckStatusFeedback.value,
       [truck.id]: { type: 'success', message: `Status updated to ${nextStatus}.` }
@@ -1300,6 +1403,10 @@ async function addTruck() {
 :deep(.leaflet-container:focus-visible) {
   outline: 3px solid var(--primary);
   outline-offset: -3px;
+}
+
+:deep(.leaflet-container.location-pick-mode) {
+  cursor: crosshair;
 }
 
 :deep(.truck-marker-wrapper),

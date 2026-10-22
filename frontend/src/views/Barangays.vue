@@ -1,5 +1,5 @@
 <template>
-  <div class="barangays-container">
+  <div class="barangays-container admin-page">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -28,24 +28,36 @@
         <span class="metric-label">BARANGAY COVERAGE</span>
         <div class="metric-val">{{ barangaysWithScheduleTargets.length }}</div>
         <span class="metric-sub">Registered and report-discovered barangays</span>
+        <svg class="mini-sparkline green" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,26 16,24 28,17 40,20 54,10 66,14 80,5 92,9 99,2" />
+        </svg>
       </div>
 
       <div class="metric-card">
         <span class="metric-label">ACTIVE INCIDENTS</span>
         <div class="metric-val text-yellow">{{ activeIncidents }}</div>
         <span class="metric-sub">Pending or currently under collection</span>
+        <svg class="mini-sparkline amber" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,21 28,24 40,14 54,17 66,9 80,13 92,5 99,2" />
+        </svg>
       </div>
 
       <div class="metric-card">
         <span class="metric-label">RESOLVED REPORTS</span>
         <div class="metric-val text-green">{{ resolvedIncidents }}</div>
         <span class="metric-sub">Successfully cleared by CLENRO units</span>
+        <svg class="mini-sparkline green" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,25 28,18 40,20 54,11 66,14 80,7 92,9 99,2" />
+        </svg>
       </div>
 
       <div class="metric-card">
         <span class="metric-label">COLLECTION SCHEDULES</span>
         <div class="metric-val text-blue">{{ areaRouteCount }}</div>
         <span class="metric-sub">Purok, zone, and street routes</span>
+        <svg class="mini-sparkline blue" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,24 28,16 40,19 54,11 66,14 80,6 92,9 99,2" />
+        </svg>
       </div>
     </div>
 
@@ -616,7 +628,7 @@ function goToTicketsForBarangay(name) {
 
 .page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-main);
@@ -658,7 +670,7 @@ function goToTicketsForBarangay(name) {
 
 .btn-primary {
   background-color: var(--primary);
-  color: #04140a;
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -675,10 +687,11 @@ function goToTicketsForBarangay(name) {
 .metric-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-sm);
 }
 
 .metric-label {
@@ -710,8 +723,9 @@ function goToTicketsForBarangay(name) {
 .table-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
 }
 
 .table-card-header {
@@ -747,6 +761,7 @@ function goToTicketsForBarangay(name) {
 
 .data-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
   text-align: left;
   font-size: 13px;

@@ -68,6 +68,49 @@ test('uses the barangay estimate when validating a status update for a truck wit
   assert.equal(truck.locationSource, 'barangay-estimate');
 });
 
+test('places idle vehicles at the estimated Central Depot location', async () => {
+  const truck = new Fleet({
+    truckId: 'TRK-IDLE-DEPOT',
+    plate: 'KGA-0000',
+    barangay: 'Balulang',
+    driver: 'Test Driver',
+    status: 'Idle',
+    location: { type: 'Point', coordinates: [124.6178, 8.4491] },
+    locationSource: 'gps',
+    locationUpdatedAt: new Date()
+  });
+
+  await truck.validate();
+
+  assert.deepEqual(truck.location.toObject(), {
+    type: 'Point',
+    coordinates: [124.6427, 8.4828]
+  });
+  assert.equal(truck.locationSource, 'barangay-estimate');
+  assert.equal(truck.locationUpdatedAt, null);
+});
+
+test('preserves a manually selected map location for an active vehicle', async () => {
+  const truck = new Fleet({
+    truckId: 'TRK-MANUAL-LOCATION',
+    plate: 'KGA-0000',
+    barangay: 'Balulang',
+    driver: 'Test Driver',
+    status: 'In Transit',
+    location: { type: 'Point', coordinates: [124.63, 8.46] },
+    locationSource: 'manual'
+  });
+
+  await truck.validate();
+
+  assert.deepEqual(truck.location.toObject(), {
+    type: 'Point',
+    coordinates: [124.63, 8.46]
+  });
+  assert.equal(truck.locationSource, 'manual');
+  assert.equal(truck.locationUpdatedAt, null);
+});
+
 test('continues to reject malformed saved vehicle coordinates', async () => {
   const truck = new Fleet({
     truckId: 'TRK-BAD-GPS',

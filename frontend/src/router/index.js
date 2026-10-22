@@ -8,7 +8,6 @@ import Reports from '../views/Reports.vue'
 import Settings from '../views/Settings.vue'
 import CommunityContent from '../views/CommunityContent.vue'
 import { getAuthToken } from '../services/api'
-import { getPreferredLandingPath } from '../services/settingsStore'
 
 const routes = [
   {
@@ -60,15 +59,11 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach(async (to) => {
-  const jwtToken = getAuthToken()
-  const firebaseToken = localStorage.getItem('firebaseToken')
-  const isAuthenticated = jwtToken || firebaseToken
-  
+router.beforeEach((to) => {
+  const isAuthenticated = Boolean(getAuthToken())
+
   if (to.path !== '/login' && !isAuthenticated) {
     return '/login'
-  } else if (to.path === '/login' && isAuthenticated) {
-    return await getPreferredLandingPath(true)
   }
   return true
 })

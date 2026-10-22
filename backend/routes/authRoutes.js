@@ -216,6 +216,7 @@ router.post('/facebook',
       const tokenData = debugBody.data;
 
       if (!debugResponse.ok || !tokenData?.is_valid || String(tokenData.app_id) !== appId) {
+        console.error('Facebook debug_token response:', debugBody);
         return res.status(401).json({
           success: false,
           message: 'Facebook access token is invalid.'

@@ -12,7 +12,7 @@
         <p>Waste Management Portal</p>
       </div>
 
-      <form @submit.prevent="login" class="login-form">
+      <form @submit.prevent="login" class="login-form" autocomplete="off">
         <div class="form-group">
           <label>Email</label>
           <div class="input-wrapper">
@@ -24,7 +24,10 @@
               v-model="email"
               type="email"
               placeholder="Enter email"
-              required 
+              :readonly="!emailEditable"
+              autocomplete="off"
+              @focus="emailEditable = true"
+              required
             />
           </div>
         </div>
@@ -36,7 +39,15 @@
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            <input v-model="password" type="password" placeholder="Enter password" required />
+            <input
+              v-model="password"
+              type="password"
+              placeholder="Enter password"
+              :readonly="!passwordEditable"
+              autocomplete="new-password"
+              @focus="passwordEditable = true"
+              required
+            />
           </div>
         </div>
 
@@ -49,7 +60,16 @@
               <line x1="12" y1="12" x2="12" y2="12"/>
               <line x1="18" y1="12" x2="18" y2="12"/>
             </svg>
-            <input v-model="securityPin" type="password" placeholder="Enter security PIN" required />
+            <input
+              v-model="securityPin"
+              type="password"
+              inputmode="numeric"
+              :readonly="!pinEditable"
+              autocomplete="off"
+              @focus="pinEditable = true"
+              placeholder="Enter security PIN"
+              required
+            />
           </div>
         </div>
 
@@ -70,9 +90,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { authApi, getAuthToken } from '../services/api'
+import { authApi } from '../services/api'
 import { getPreferredLandingPath } from '../services/settingsStore'
 
 const router = useRouter()
@@ -81,8 +101,21 @@ const theme = ref(localStorage.getItem('theme') || 'dark')
 const email = ref('')
 const password = ref('')
 const securityPin = ref('')
+const emailEditable = ref(false)
+const passwordEditable = ref(false)
+const pinEditable = ref(false)
 const isLoading = ref(false)
 const errorMessage = ref('')
+
+function clearLoginFields() {
+  email.value = ''
+  password.value = ''
+  securityPin.value = ''
+  emailEditable.value = false
+  passwordEditable.value = false
+  pinEditable.value = false
+  errorMessage.value = ''
+}
 
 async function login() {
   errorMessage.value = ''
@@ -112,30 +145,60 @@ async function login() {
 
 onMounted(() => {
   document.documentElement.setAttribute('data-theme', theme.value)
-  if (getAuthToken()) {
-    getPreferredLandingPath(true).then(path => router.push(path))
-  }
+  clearLoginFields()
+  window.addEventListener('pageshow', clearLoginFields)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pageshow', clearLoginFields)
 })
 </script>
 
 <style scoped>
 .login {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-app);
   padding: 20px;
+  overflow: hidden;
+}
+
+.login::before {
+  position: absolute;
+  z-index: -1;
+  inset: -30%;
+  background:
+    radial-gradient(ellipse at 22% 34%, rgba(34, 197, 94, 0.2), transparent 36%),
+    radial-gradient(ellipse at 78% 68%, rgba(16, 185, 129, 0.16), transparent 34%);
+  content: '';
+  animation: login-glow-drift 12s ease-in-out infinite alternate;
 }
 
 .login-card {
+  position: relative;
   width: 100%;
   max-width: 400px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 32px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.24), 0 0 48px rgba(34, 197, 94, 0.08);
+  animation: login-card-arrive 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.login-card::before {
+  position: absolute;
+  top: -1px;
+  left: 12%;
+  width: 76%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  content: '';
 }
 
 .login-header {
@@ -153,6 +216,8 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: white;
+  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.25);
+  animation: login-logo-pulse 3s ease-in-out 700ms infinite;
 }
 
 .login-header h1 {
@@ -207,11 +272,13 @@ onMounted(() => {
   padding: 10px 12px 10px 36px;
   color: var(--text-main);
   font-size: 13px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .form-group input:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
 }
 
 .form-group input::placeholder {
@@ -251,6 +318,12 @@ onMounted(() => {
 
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-hover);
+  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.22);
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  transition: background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
 .btn-primary:disabled {
@@ -289,5 +362,51 @@ onMounted(() => {
   gap: 4px;
   font-size: 11px;
   color: var(--text-muted);
+}
+
+@keyframes login-glow-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to { transform: translate3d(2%, 1%, 0) scale(1.08); }
+}
+
+@keyframes login-card-arrive {
+  from { opacity: 0; transform: translateY(24px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes login-logo-pulse {
+  0%, 100% { box-shadow: 0 8px 22px rgba(34, 197, 94, 0.2); }
+  50% { box-shadow: 0 8px 30px rgba(34, 197, 94, 0.42); }
+}
+
+@media (max-width: 480px) {
+  .login {
+    min-height: 100svh;
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 26px 22px;
+    border-radius: 16px;
+  }
+}
+
+@media (max-height: 620px) {
+  .login {
+    align-items: flex-start;
+  }
+
+  .login-card {
+    margin-block: 12px;
+    padding-block: 22px;
+  }
+
+  .login-header {
+    margin-bottom: 18px;
+  }
+
+  .login-footer {
+    margin-top: 18px;
+  }
 }
 </style>

@@ -165,6 +165,11 @@ test('accepts legacy GPS strings, numeric coordinates, and GeoJSON report locati
     );
     const filteredReports = await barangayReports.json();
     assert.equal(filteredReports.total, submissions.length);
+
+    const latestResponse = await fetch(`${baseUrl.replace('/fleet', '/reports')}?page=1&limit=10`);
+    const latestReports = await latestResponse.json();
+    assert.equal(latestResponse.status, 200);
+    assert.ok(reportIds.every(id => latestReports.data.some(report => report.reportId === id)));
   } finally {
     memoryStore.reports = memoryStore.reports.filter(report => !reportIds.includes(report.reportId));
   }

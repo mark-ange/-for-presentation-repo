@@ -16,6 +16,13 @@ const {
 const Report = require('../models/Report');
 
 const truckLocation = (truck) => {
+  if (truck.status === 'Idle') {
+    return {
+      location: getBarangayLocation('Central Depot'),
+      locationSource: 'barangay-estimate'
+    };
+  }
+
   const storedLocation = parseCoordinates(truck.location);
   return {
     location: storedLocation || getBarangayLocation(truck.barangay),
@@ -124,13 +131,20 @@ router.get('/closest', async (req, res) => {
         },
         { $limit: 100 }
       ]);
+      const locatedWithIdleDepotLocations = located.map(truck => {
+        if (truck.status !== 'Idle') return truck;
+        const { location } = truckLocation(truck);
+        return location
+          ? { ...truck, location, distanceMeters: haversineDistanceMeters(target, location) }
+          : null;
+      }).filter(Boolean);
       const unlocated = await Fleet.find({
         status: { $nin: ['Maintenance', 'Out of Service'] },
         $or: [{ location: { $exists: false } }, { location: null }]
       }).lean();
 
       trucks = [
-        ...located,
+        ...locatedWithIdleDepotLocations,
         ...unlocated.map(truck => {
           const { location } = truckLocation(truck);
           return location
@@ -295,14 +309,15 @@ router.put('/:id',
     body('driver').optional().isString().trim().escape(),
     body('barangay').optional().isString().trim().escape(),
     body('plate').optional().isString().trim().escape(),
-    body('position').optional().isObject()
+    body('position').optional().isObject(),
+    body('location').optional().isObject()
   ]),
   protect,
   adminOnly,
   async (req, res) => {
     try {
       const param = req.params.id;
-      const { status, driver, barangay, plate, position } = req.body;
+      const { status, driver, barangay, plate, position, location } = req.body;
 
       const truckQuery = mongoose.isValidObjectId(param)
         ? { $or: [{ _id: param }, { truckId: param }] }
@@ -313,7 +328,27 @@ router.put('/:id',
         return res.status(404).json({ success: false, message: 'Vehicle not found' });
       }
 
-      if (status) truck.status = status;
+      const selectedLocation = location === undefined ? null : parseCoordinates(location);
+      if (location !== undefined && !selectedLocation) {
+        return res.status(400).json({
+          success: false,
+          message: 'Provide a valid map location using latitude and longitude.'
+        });
+      }
+
+      if (status) {
+        if (!selectedLocation && truck.status === 'Idle' && status !== 'Idle' && truck.locationSource !== 'gps') {
+          truck.location = getBarangayLocation(truck.barangay) || undefined;
+          truck.locationSource = 'barangay-estimate';
+          truck.locationUpdatedAt = null;
+        }
+        truck.status = status;
+      }
+      if (selectedLocation) {
+        truck.location = selectedLocation;
+        truck.locationSource = 'manual';
+        truck.locationUpdatedAt = null;
+      }
       if (driver) truck.driver = driver.trim();
       if (barangay) truck.barangay = barangay.trim();
       if (plate) truck.plate = plate.trim();

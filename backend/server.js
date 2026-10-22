@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 if (!process.env.MONGO_URI && process.env.MONGODB_URI) {
   process.env.MONGO_URI = process.env.MONGODB_URI;

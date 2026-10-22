@@ -10,7 +10,7 @@ Administrators manage collection routes from the Barangays page. Each barangay c
 
 ## Fleet status tracking
 
-Admins can change a vehicle's status directly from its Fleet inventory row or vehicle details panel; changes save to the backend automatically. Supported statuses are **Idle**, **Dispatching**, **In Transit**, **Maintenance**, and **Out of Service**. Dispatching and In Transit both count as active route vehicles. Maintenance and Out of Service vehicles are excluded from closest-truck suggestions.
+Admins can change a vehicle's status directly from its Fleet inventory row or vehicle details panel; changes save to the backend automatically. Supported statuses are **Idle**, **Dispatching**, **In Transit**, **Maintenance**, and **Out of Service**. Idle vehicles remain in inventory and available for assignment but are hidden from the map. When dispatching an idle vehicle, choose a location directly on the Fleet map; the manually selected location remains until replaced by GPS or the vehicle is returned to Idle. Dispatching and In Transit both count as active route vehicles. Maintenance and Out of Service vehicles are excluded from closest-truck suggestions.
 
 To add the clearly labeled fictional demonstration routes for the six resident sign-up barangays without replacing existing schedules, run `npm --prefix backend run seed:schedules:sample`. The sample records are marked **SAMPLE ONLY — not official or confirmed CLENRO routes** in the admin and resident apps. Exact area routes take precedence over the sample fallback.
 
@@ -24,7 +24,7 @@ Settings are stored on the administrator account. The default landing console is
 
 ## Run locally
 
-1. Configure a reachable MongoDB URI. For this local setup, the backend reads `MONGODB_URI` from the MongoDB Atlas-generated `backend/atlas-credentials.env` file (gitignored); it can also use `MONGO_URI` from the process environment. Set production secrets through the hosting provider's secret settings rather than committing credentials.
+1. Configure a reachable MongoDB URI. For this local setup, copy `backend/.env.example` to `backend/.env` and add your private values; the backend also supports MongoDB Atlas-generated `backend/atlas-credentials.env` (gitignored). Never commit `.env` files or real credentials. Set production secrets through the hosting provider's secret settings.
 2. Start the API from the repository root:
 
    ```powershell
@@ -37,9 +37,13 @@ Settings are stored on the administrator account. The default landing console is
    npm --prefix frontend run dev
    ```
 
-The development server proxies `/api` to `http://localhost:5000`. MongoDB must be available for records and preferences to persist.
+   Copy `frontend/.env.example` to `frontend/.env.local` and fill in your Firebase web app configuration before starting Vite. Vite embeds `VITE_*` values into the browser bundle; these are public client settings, not secrets. Protect Firebase services with Authentication, Firestore, and Storage rules, and restrict the API key in Google Cloud.
 
-When deploying behind a trusted reverse proxy that forwards `X-Forwarded-For`, set `TRUST_PROXY=1` in the hosting environment if exactly one trusted proxy sits in front of the API. The Render blueprint already sets this for its hosted API. Do not enable it when clients can connect directly to the API; trusting forwarded headers from untrusted clients can undermine IP-based rate limits.
+The development server proxies `/api` to `http://localhost:5000`. MongoDB must be available for records and preferences to persist. The local admin and resident app must use the same API/database to see the same incident reports. If the resident app submits to a hosted API, set `VITE_API_URL` in `frontend/.env.local` to that API's `/api` base URL before starting Vite; otherwise the admin uses the local backend and will not see reports stored only by the hosted backend.
+
+For a physical Android phone on the same Wi-Fi, the app's `CITYCARE_API_URL` defaults to this development computer's current LAN address (`http://192.168.0.104:5000/api`). If the address changes, set `CITYCARE_API_URL` in the Gradle user properties or pass `-PCITYCARE_API_URL=http://<computer-lan-ip>:5000/api` when building the app. Allow inbound TCP port 5000 on the computer's private-network firewall. Android Studio emulators should use `-PCITYCARE_API_URL=http://10.0.2.2:5000/api`.
+
+When deploying behind a trusted reverse proxy that forwards `X-Forwarded-For`, set `TRUST_PROXY=1` in the hosting environment if exactly one trusted proxy sits in front of the API. Do not enable it when clients can connect directly to the API; trusting forwarded headers from untrusted clients can undermine IP-based rate limits.
 
 ### Facebook sign-in for the resident app
 
@@ -58,7 +62,7 @@ npm --prefix backend run dev
 
 Replace the example DNS address with a resolver available on your network. The backend uses `citycare_db` by default; set `MONGO_DATABASE` to choose a different database name.
 
-The Firebase web app configuration is included in `frontend/src/firebase.js`, so running the frontend does not require a `.env` file. Firebase web configuration is visible to browser users; protect Firebase services with Authentication, Firestore, and Storage rules, and restrict the API key in Google Cloud. Backend Firebase Admin features are optional and require a private service account key at `backend/config/serviceAccountKey.json`.
+Backend Firebase Admin features are optional and require a private service account key at `backend/config/serviceAccountKey.json`; that key file is gitignored and must never be committed. The example environment files contain placeholders only. GitHub Actions/deployment builds should receive any required build-time variables from configured repository or hosting settings, not from committed local `.env` files.
 
 ## Resident-app content management
 
@@ -104,7 +108,7 @@ To run the focused coordinate and closest-truck API tests from the repository ro
 
 ### Local access from phones on the same Wi-Fi
 
-You do not need Render for local use. Run the backend on the computer and point the Android app at that computer's private LAN address:
+For local use, run the backend on the computer and point the Android app at that computer's private LAN address:
 
 1. Start the API from the repository root with `npm --prefix backend start` (or, from the `backend` folder, `npm start`). Keep the terminal open.
 2. On Windows, run `ipconfig` and find the IPv4 address for the Wi-Fi adapter connected to the same network as the phone (for example, `192.168.1.50`).
@@ -114,19 +118,5 @@ You do not need Render for local use. Run the backend on the computer and point 
 6. Build/install the Android app with the updated URL. Submit a test report and check the admin portal's **Incidents** page. Keep the computer awake and the backend running while reports need to be received.
 
 The Vue development server is configured to listen on the LAN as well. To open the admin portal from another device on the same Wi-Fi, run `npm --prefix frontend run dev -- --host 0.0.0.0`, then visit `http://<COMPUTER_IP>:5173/`. API calls from this portal are proxied to the backend on the same computer.
-
-### Optional public HTTPS deployment (Render)
-
-If phones must submit from different networks or locations, deploy the API and admin site to public hosting with HTTPS. A Render Blueprint is included in `render.yaml`:
-
-1. Push this project to a GitHub repository and create a Render account.
-2. In Render, choose **New → Blueprint**, connect that repository, and deploy `render.yaml`. It creates `citycare-cdo-api` and `citycare-cdo-admin`; the browser admin is built with the API's public HTTPS address.
-3. Before the API can become healthy, set its `MONGO_URI` environment variable in Render to the MongoDB Atlas connection string. Keep the database username/password private. Add the Render service's outbound IP addresses shown in its settings to the Atlas Network Access allowlist. If the selected Render plan has no stable outbound IPs, contact the host or use a private network/static-egress option rather than exposing Atlas broadly.
-4. If the admin site's Render hostname is not `citycare-cdo-admin.onrender.com`, update the API's `ALLOWED_ORIGINS` value to the exact HTTPS admin-site origin, with no trailing slash.
-5. Wait for both deployments to finish. Check `https://<API_HOST>/api/health`; it must return `ONLINE` and `CONNECTED`. Open the admin site and submit a report from the mobile app to verify end-to-end delivery.
-6. In the separate Android project (not included here), set `CityCareApiService.kt`'s base URL to `https://<API_HOST>/api/` and build/release a new app version. An emulator should use this same public HTTPS URL once deployed; `10.0.2.2` is only for a local emulator/backend setup.
-7. The mobile app can submit its compressed photo in `photoBase64`; alternatively, upload photos to Firebase Storage or another image host and send the HTTPS download URL as `photoUrl`.
-
-Render may sleep free web-service instances when idle, causing a delay on the first request; use an always-on plan for time-sensitive operations. The included rate limits are per source IP: by default, 1,500 submissions/hour and 10,000 API requests/hour. Many mobile carriers and offices share public IPs, so adjust those values to match expected traffic. These in-memory limits suit a single API instance; use a shared rate-limit store before running multiple instances.
 
 Each report receives a unique ID based on its MongoDB document ID. Reports are paginated for the admin UI, which can browse more than 1,000 stored reports without downloading the whole collection each refresh.

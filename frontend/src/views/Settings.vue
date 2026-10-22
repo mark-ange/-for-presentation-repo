@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-container">
+  <div class="settings-container admin-page">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -531,7 +531,7 @@ function logout() {
 
 .page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-main);
@@ -573,7 +573,7 @@ function logout() {
 
 .btn-primary {
   background-color: var(--primary);
-  color: #04140a;
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -596,11 +596,12 @@ function logout() {
 .settings-tabs {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn {
@@ -849,6 +850,30 @@ function logout() {
   }
   .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .settings-tabs {
+    padding: 8px;
+  }
+
+  .tab-btn {
+    padding: 9px;
   }
 }
 </style>

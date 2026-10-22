@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard">
+  <div class="dashboard admin-page">
     <!-- Header -->
     <div class="dashboard-header">
       <div>
@@ -32,6 +32,9 @@
         <div class="metric-label">Total Incidents</div>
         <div class="metric-value">{{ stats.totalTickets }}</div>
         <div class="metric-trend">All reports</div>
+        <svg class="metric-sparkline" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,26 16,24 28,17 40,20 54,10 66,14 80,5 92,9 99,2" />
+        </svg>
       </div>
       
       <div class="metric warning">
@@ -44,6 +47,9 @@
         <div class="metric-label">Pending</div>
         <div class="metric-value">{{ stats.pending }}</div>
         <div class="metric-trend">Needs dispatch</div>
+        <svg class="metric-sparkline warning" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,21 28,24 40,14 54,17 66,9 80,13 92,5 99,2" />
+        </svg>
       </div>
       
       <div class="metric info">
@@ -56,6 +62,9 @@
         <div class="metric-label">In Transit</div>
         <div class="metric-value">{{ stats.assigned }}</div>
         <div class="metric-trend">{{ fleetSummary.inTransit }} units active</div>
+        <svg class="metric-sparkline info" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,24 28,16 40,19 54,11 66,14 80,6 92,9 99,2" />
+        </svg>
       </div>
       
       <div class="metric success">
@@ -68,6 +77,9 @@
         <div class="metric-label">Resolved</div>
         <div class="metric-value">{{ stats.resolved }}</div>
         <div class="metric-trend">Cleared</div>
+        <svg class="metric-sparkline success" viewBox="0 0 100 32" aria-hidden="true" focusable="false">
+          <polyline points="2,27 16,25 28,18 40,20 54,11 66,14 80,7 92,9 99,2" />
+        </svg>
       </div>
     </div>
 
@@ -77,7 +89,13 @@
       <div class="column">
         <div class="panel">
           <div class="panel-header">
-            <h2>Barangay Waste Distribution</h2>
+            <h2>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/>
+                <circle cx="12" cy="10" r="2.5"/>
+              </svg>
+              Barangay Waste Distribution
+            </h2>
             <button class="link-btn" @click="router.push('/barangays')">View All</button>
           </div>
           
@@ -129,7 +147,13 @@
       <div class="column">
         <div class="panel">
           <div class="panel-header">
-            <h2>Recent Incidents</h2>
+            <h2>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M10 21h4"/>
+              </svg>
+              Recent Incidents
+            </h2>
             <button class="link-btn" @click="router.push('/tickets')">View All ({{ stats.liveQueue.length }})</button>
           </div>
           
@@ -266,19 +290,21 @@ onUnmounted(() => {
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .dashboard-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
 .dashboard-header h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
+  letter-spacing: -0.025em;
   color: var(--text-main);
 }
 
@@ -329,16 +355,24 @@ onUnmounted(() => {
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 14px;
 }
 
 .metric {
+  min-height: 126px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 16px;
+  border-radius: 10px;
+  padding: 16px 18px 15px;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.metric:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .metric::before {
@@ -346,8 +380,8 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  height: 3px;
+  bottom: 0;
+  width: 4px;
   background: var(--primary);
 }
 
@@ -356,14 +390,14 @@ onUnmounted(() => {
 .metric.success::before { background: var(--status-resolved); }
 
 .metric-icon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   background: var(--primary-subtle);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 9px;
   color: var(--primary);
 }
 
@@ -380,22 +414,52 @@ onUnmounted(() => {
 }
 
 .metric-value {
-  margin: 8px 0;
+  margin: 5px 0 2px;
   font-size: 24px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--primary-dark);
 }
+
+.metric.warning .metric-value { color: var(--status-pending); }
+.metric.info .metric-value { color: var(--status-dispatched); }
+.metric.success .metric-value { color: var(--status-resolved); }
 
 .metric-trend {
   font-size: 11px;
   color: var(--text-secondary);
 }
 
+.metric-sparkline {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 78px;
+  height: 28px;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
+}
+
+.metric-sparkline.warning {
+  stroke: var(--status-pending);
+}
+
+.metric-sparkline.info {
+  stroke: var(--status-dispatched);
+}
+
+.metric-sparkline.success {
+  stroke: var(--status-resolved);
+}
+
 /* Content Grid */
 .content-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 20px;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 16px;
 }
 
 .column {
@@ -407,8 +471,9 @@ onUnmounted(() => {
 .panel {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 16px;
+  border-radius: 10px;
+  padding: 17px;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
@@ -421,10 +486,20 @@ onUnmounted(() => {
 }
 
 .panel-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-main);
+}
+
+.panel-header h2 svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: var(--primary);
 }
 
 .link-btn {
@@ -539,6 +614,12 @@ onUnmounted(() => {
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
   padding: 12px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.ticket-item:hover {
+  border-color: var(--primary);
+  background: var(--bg-card);
 }
 
 .ticket-header {
@@ -640,6 +721,39 @@ onUnmounted(() => {
   
   .fleet-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard-header {
+    align-items: flex-start;
+  }
+
+  .dashboard-header h1 {
+    font-size: 19px;
+  }
+
+  .metrics {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header {
+    flex-direction: column;
+  }
+
+  .metric {
+    min-height: 116px;
+    padding: 13px 14px 12px;
+  }
+
+  .metric-sparkline {
+    width: 58px;
+  }
+
+  .panel {
+    padding: 13px;
   }
 }
 </style>

@@ -46,7 +46,7 @@ const fleetSchema = new mongoose.Schema({
   },
   locationSource: {
     type: String,
-    enum: ['gps', 'barangay-estimate'],
+    enum: ['gps', 'manual', 'barangay-estimate'],
     default: 'barangay-estimate'
   },
   locationUpdatedAt: {
@@ -62,6 +62,13 @@ const fleetSchema = new mongoose.Schema({
 });
 
 fleetSchema.pre('validate', function (next) {
+  if (this.status === 'Idle') {
+    this.location = getBarangayLocation('Central Depot');
+    this.locationSource = 'barangay-estimate';
+    this.locationUpdatedAt = null;
+    return next();
+  }
+
   const coordinates = this.get('location.coordinates');
   if (!Array.isArray(coordinates) || coordinates.length === 0) {
     this.location = getBarangayLocation(this.barangay) || undefined;

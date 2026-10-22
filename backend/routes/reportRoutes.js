@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const Report = require('../models/Report');
 const Barangay = require('../models/Barangay');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 const memoryStore = require('../config/memoryStore');
 const {
   apiLimiter,
@@ -19,6 +21,50 @@ const REPORT_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'REJE
 const DEFAULT_REPORT_PAGE_SIZE = 1000;
 const MAX_REPORT_PAGE_SIZE = 1000;
 const MAX_REPORT_PHOTO_BASE64_LENGTH = 5600000;
+
+async function notifyResidentReportUpdate(report, previous) {
+  const statusChanged = report.status !== previous.status;
+  const assignmentChanged = (report.unitAssigned || report.team || '') !== previous.assignment;
+  const notesChanged = report.notes !== previous.notes;
+  if (!statusChanged && !assignmentChanged && !notesChanged) return;
+
+  try {
+    const recipient = report.user
+      ? await User.findById(report.user).select('_id')
+      : report.userEmail
+        ? await User.findOne({ email: report.userEmail.trim().toLowerCase() }).select('_id')
+        : null;
+    if (!recipient) return;
+
+    const status = String(report.status || 'PENDING').toUpperCase().replace(/[\s-]+/g, '_');
+    const statusLabels = {
+      PENDING: 'pending review',
+      ASSIGNED: 'assigned',
+      IN_PROGRESS: 'in progress',
+      RESOLVED: 'resolved',
+      REJECTED: 'rejected'
+    };
+    const title = statusChanged
+      ? `Your report was ${statusLabels[status] || status.toLowerCase().replace(/_/g, ' ')}`
+      : assignmentChanged
+        ? 'Your report was assigned'
+        : 'CLENRO updated your report';
+    const currentAssignment = report.unitAssigned || report.team || '';
+    const body = report.notes?.trim() ||
+      (assignmentChanged && currentAssignment
+        ? `Assigned to ${currentAssignment}.`
+        : `The status of "${report.title}" is now ${statusLabels[status] || status.toLowerCase().replace(/_/g, ' ')}.`);
+
+    await Notification.create({
+      user: recipient._id,
+      title,
+      body,
+      type: 'REPORT_UPDATE'
+    });
+  } catch (error) {
+    console.error('Report was updated, but its resident notification could not be created:', error.message);
+  }
+}
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -452,6 +498,11 @@ router.put('/:id/dispatch',
           return res.status(404).json({ success: false, message: 'Report not found' });
         }
 
+        const previous = {
+          status: report.status,
+          assignment: report.unitAssigned || report.team || '',
+          notes: report.notes
+        };
         if (team !== undefined) report.team = team;
         if (personnel !== undefined) report.personnel = personnel;
         if (notes !== undefined) report.notes = notes;
@@ -462,6 +513,7 @@ router.put('/:id/dispatch',
         }
 
         await report.save();
+        await notifyResidentReportUpdate(report, previous);
 
         return res.json({
           success: true,
@@ -533,6 +585,11 @@ router.put('/:id/status',
           return res.status(404).json({ success: false, message: `Report "${rawParam}" not found` });
         }
 
+        const previous = {
+          status: report.status,
+          assignment: report.unitAssigned || report.team || '',
+          notes: report.notes
+        };
         if (status) report.status = status;
         if (!report.assignedAt && status && ['assigned', 'in progress'].includes(status.toLowerCase().replace(/_/g, ' '))) {
           report.assignedAt = new Date();
@@ -549,6 +606,7 @@ router.put('/:id/status',
         if (notes !== undefined) report.notes = notes;
 
         await report.save();
+        await notifyResidentReportUpdate(report, previous);
 
         return res.json({
           success: true,

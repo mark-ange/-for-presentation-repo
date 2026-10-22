@@ -1,5 +1,5 @@
 <template>
-  <div class="reports-container">
+  <div class="reports-container admin-page">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -62,11 +62,13 @@
             class="bar-group"
           >
             <span class="bar-value font-mono">{{ item.count }}</span>
-            <div class="bar-slot">
-              <div
-                class="bar-fill"
-                :style="{ height: `${Math.max(16, item.height)}%` }"
-              ></div>
+            <div class="bar-plot">
+              <div class="bar-slot">
+                <div
+                  class="bar-fill"
+                  :style="{ height: `${Math.max(16, item.height)}%` }"
+                ></div>
+              </div>
             </div>
             <span class="bar-label">Brgy. {{ item.name }}</span>
           </div>
@@ -115,16 +117,16 @@
         <svg v-if="chartPoints.length" viewBox="0 0 700 240" class="timeline-svg" preserveAspectRatio="none">
           <defs>
             <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
-              <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+              <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="var(--primary)" stop-opacity="0.0"/>
             </linearGradient>
           </defs>
 
           <!-- Grid Lines -->
-          <line x1="0" y1="40" x2="700" y2="40" stroke="rgba(255,255,255,0.05)" />
-          <line x1="0" y1="100" x2="700" y2="100" stroke="rgba(255,255,255,0.05)" />
-          <line x1="0" y1="160" x2="700" y2="160" stroke="rgba(255,255,255,0.05)" />
-          <line x1="0" y1="220" x2="700" y2="220" stroke="rgba(255,255,255,0.05)" />
+          <line x1="0" y1="40" x2="700" y2="40" stroke="var(--border-subtle)" />
+          <line x1="0" y1="100" x2="700" y2="100" stroke="var(--border-subtle)" />
+          <line x1="0" y1="160" x2="700" y2="160" stroke="var(--border-subtle)" />
+          <line x1="0" y1="220" x2="700" y2="220" stroke="var(--border-subtle)" />
 
           <!-- Area -->
           <polygon :points="areaPoints" fill="url(#areaGradient)" />
@@ -133,7 +135,7 @@
           <polyline
             :points="linePoints"
             fill="none"
-            stroke="#10b981"
+            stroke="var(--primary)"
             stroke-width="2"
             stroke-linecap="round"
           />
@@ -145,8 +147,8 @@
             :cx="p.x"
             :cy="p.y"
             r="4"
-            fill="#121c15"
-            stroke="#10b981"
+            fill="var(--bg-card)"
+            stroke="var(--primary)"
             stroke-width="2"
           />
         </svg>
@@ -223,11 +225,13 @@ async function loadAnalytics() {
       }
 
       const maxVal = Math.max(...d.barangayStats.map(b => b.count), 1)
-      barangayReports.value = d.barangayStats.map(b => ({
-        name: b.name,
-        count: b.count,
-        height: Math.round((b.count / maxVal) * 100)
-      }))
+      barangayReports.value = [...d.barangayStats]
+        .sort((first, second) => second.count - first.count || first.name.localeCompare(second.name))
+        .map(b => ({
+          name: b.name,
+          count: b.count,
+          height: Math.round((b.count / maxVal) * 100)
+        }))
       categories.value = d.categories
       responseTimes.value = d.responseTimes
     }
@@ -291,7 +295,7 @@ onUnmounted(() => {
 
 .page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-main);
@@ -323,7 +327,7 @@ onUnmounted(() => {
 
 .btn-primary {
   background-color: var(--primary);
-  color: #04140a;
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -340,10 +344,11 @@ onUnmounted(() => {
 .metric-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-sm);
 }
 
 .metric-label {
@@ -385,8 +390,9 @@ onUnmounted(() => {
 .panel-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
@@ -409,49 +415,67 @@ onUnmounted(() => {
 
 /* Bar Chart */
 .bar-chart-container {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  height: 200px;
-  padding: 10px 14px 0;
+  display: grid;
+  grid-auto-columns: minmax(52px, 1fr);
+  grid-auto-flow: column;
+  align-items: stretch;
+  gap: 12px;
+  height: 250px;
+  padding: 8px 10px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .bar-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  max-width: 60px;
+  display: grid;
+  grid-template-rows: 20px minmax(0, 1fr) 52px;
+  align-items: stretch;
+  min-width: 0;
   height: 100%;
+}
+
+.bar-plot {
+  position: relative;
+  min-height: 0;
 }
 
 .bar-value {
   font-size: 11px;
   color: var(--text-secondary);
+  text-align: center;
 }
 
 .bar-slot {
-  flex: 1;
-  width: 24px;
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: min(28px, 70%);
   background-color: var(--bg-surface);
-  border-radius: 4px;
+  border-radius: 5px;
   display: flex;
   align-items: flex-end;
   overflow: hidden;
+  transform: translateX(-50%);
 }
 
 .bar-fill {
   width: 100%;
   background-color: var(--primary);
-  border-radius: 4px;
+  border-radius: 5px;
   transition: height 0.3s ease;
 }
 
 .bar-label {
+  display: -webkit-box;
+  align-self: start;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   font-size: 11px;
+  line-height: 1.35;
   color: var(--text-muted);
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 /* Category List */
@@ -512,5 +536,36 @@ onUnmounted(() => {
   font-size: 11px;
   color: var(--text-muted);
   padding: 0 4px;
+}
+
+@media (max-width: 900px) {
+  .charts-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions > .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-card {
+    padding: 15px;
+  }
+
+  .bar-chart-container {
+    grid-auto-columns: 62px;
+    gap: 10px;
+  }
 }
 </style>
