@@ -86,22 +86,28 @@ object CityCareApiService {
     private const val API_SETTINGS_PREFERENCES = "citycare_api_settings"
     private const val API_BASE_URL_KEY = "api_base_url"
     private const val API_CONFIG_VERSION_KEY = "api_config_version"
-    private const val API_CONFIG_VERSION = 2
+    private const val API_CONFIG_VERSION = 4
 
     fun loadApiBaseUrl(context: Context) {
         val preferences = context.getSharedPreferences(API_SETTINGS_PREFERENCES, Context.MODE_PRIVATE)
         val savedUrl = preferences.getString(API_BASE_URL_KEY, null)
-        val migrateLocalUrl = preferences.getInt(API_CONFIG_VERSION_KEY, 1) < API_CONFIG_VERSION &&
+        val previousConfigVersion = preferences.getInt(API_CONFIG_VERSION_KEY, 1)
+        val savedHost = savedUrl?.let { runCatching { URI(it).host?.lowercase() }.getOrNull() }
+        val defaultHost = runCatching { URI(BuildConfig.CITYCARE_API_URL).host?.lowercase() }.getOrNull()
+        val migrateEmulatorUrl = previousConfigVersion < API_CONFIG_VERSION &&
+            savedHost == "10.0.2.2" &&
+            defaultHost != "10.0.2.2"
+        val migrateLocalUrl = previousConfigVersion < API_CONFIG_VERSION &&
             savedUrl != null &&
             isLocalApiUrl(savedUrl) &&
             BuildConfig.CITYCARE_API_URL.startsWith("https://", ignoreCase = true)
-        val selectedUrl = if (migrateLocalUrl) BuildConfig.CITYCARE_API_URL
+        val selectedUrl = if (migrateEmulatorUrl || migrateLocalUrl) BuildConfig.CITYCARE_API_URL
         else savedUrl ?: BuildConfig.CITYCARE_API_URL
         BASE_URL = normalizeApiBaseUrl(selectedUrl)
             ?: BuildConfig.CITYCARE_API_URL
         preferences.edit().apply {
             putInt(API_CONFIG_VERSION_KEY, API_CONFIG_VERSION)
-            if (migrateLocalUrl) remove(API_BASE_URL_KEY)
+            if (migrateEmulatorUrl || migrateLocalUrl) remove(API_BASE_URL_KEY)
         }.apply()
     }
 
@@ -445,7 +451,11 @@ object CityCareApiService {
         }
     }
 
-    fun addLocalReport(context: Context, report: WasteReportItem) {
+    fun addLocalReport(
+        context: Context,
+        report: WasteReportItem,
+        enqueueUpload: Boolean = true
+    ) {
         val taggedReport = report.copy(userEmail = currentUserEmail)
         updateSyncedReportIds(context) { it.remove(taggedReport.id) }
         val cacheIndex = userReportsCache.indexOfFirst {
@@ -458,7 +468,7 @@ object CityCareApiService {
             userReportsCache[cacheIndex] = taggedReport
         }
         saveReportsToDisk(context)
-        enqueuePendingReportUpload(context)
+        if (enqueueUpload) enqueuePendingReportUpload(context)
     }
 
     fun enqueuePendingReportUpload(context: Context) {
@@ -922,60 +932,48 @@ object CityCareApiService {
             }
         }
 
-    /**
-     * Automatic Social / Google OAuth Login & MongoDB Auto-Registration using real Google Profile data
-     */
+    /** Authenticates the Google ID token with the API and creates a resident profile if needed. */
     suspend fun loginWithGoogleSocial(
-        email: String,
-        fullName: String,
-        photoUrl: String? = null,
+        idToken: String,
         context: Context
-    ): Boolean = withContext(Dispatchers.IO) {
-        val cleanEmail = email.trim().lowercase()
-        val cleanName = fullName.trim().ifEmpty { cleanEmail.substringBefore("@") }
-
-        if (cleanEmail.isEmpty() || !hasValidatedInternetConnection(context)) return@withContext false
-
-        val isLoggedIn = loginUserOnline(cleanEmail, "google_oauth_pass", context)
-        if (isLoggedIn) {
-            if (!photoUrl.isNullOrBlank()) currentUserPhotoUrl = photoUrl
-            return@withContext true
-        }
-
-        val account = CitizenAccount(
-            name = cleanName,
-            purok = "Zone 3",
-            identifier = cleanEmail,
-            password = "google_oauth_pass",
-            email = cleanEmail,
-            phoneNumber = "",
-            barangay = "Carmen"
-        )
-        val (isRegistered, _) = registerCitizenOnline(account)
-        if (!isRegistered) return@withContext false
-        return@withContext loginUserOnline(cleanEmail, "google_oauth_pass", context)
-    }
+    ): Pair<Boolean, String> =
+        completeSocialSignIn("google", "idToken", idToken, "Google", context)
 
     suspend fun loginWithFacebookAccessToken(
         accessToken: String,
         context: Context
+    ): Pair<Boolean, String> =
+        completeSocialSignIn("facebook", "accessToken", accessToken, "Facebook", context)
+
+    private suspend fun completeSocialSignIn(
+        endpoint: String,
+        tokenField: String,
+        providerToken: String,
+        providerName: String,
+        context: Context
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        if (accessToken.isBlank()) {
-            return@withContext false to "Facebook did not return an access token."
+        if (providerToken.isBlank()) {
+            return@withContext false to "$providerName did not return an authentication token."
         }
         if (!hasValidatedInternetConnection(context)) {
-            return@withContext false to "An internet connection is required to sign in. Connect and try again."
+            return@withContext false to "Could not reach CityCare. Check the API connection and try again."
         }
 
-        try {
-            val connection = (URL("$BASE_URL/auth/facebook").openConnection() as HttpURLConnection).apply {
+        authToken = null
+        val connection = try {
+            (URL("$BASE_URL/auth/$endpoint").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                connectTimeout = 10000
-                readTimeout = 10000
+                connectTimeout = 8000
+                readTimeout = 8000
             }
-            val payload = JSONObject().put("accessToken", accessToken).toString()
+        } catch (e: Exception) {
+            return@withContext false to "Could not connect to CityCare: ${e.localizedMessage ?: "network error"}"
+        }
+
+        try {
+            val payload = JSONObject().put(tokenField, providerToken).toString()
             OutputStreamWriter(connection.outputStream).use { it.write(payload) }
 
             val responseCode = connection.responseCode
@@ -983,20 +981,20 @@ object CityCareApiService {
             val responseText = responseStream?.let {
                 BufferedReader(InputStreamReader(it)).use { reader -> reader.readText() }
             }.orEmpty()
-            connection.disconnect()
-
             val response = runCatching { JSONObject(responseText) }.getOrNull()
             if (responseCode !in 200..299) {
-                return@withContext false to response?.optString("message").orEmpty()
-                    .ifBlank { "Facebook sign-in failed (HTTP $responseCode)." }
+                val message = response?.optString("message")?.takeIf { it.isNotBlank() }
+                return@withContext false to (message ?: "$providerName sign-in failed (HTTP $responseCode).")
             }
 
-            val user = response?.optJSONObject("data")
-                ?: return@withContext false to "Facebook sign-in returned incomplete account data."
-            authToken = response.optString("token").takeIf { it.isNotBlank() }
-                ?: return@withContext false to "Facebook sign-in did not return an account session."
+            val token = response?.optString("token")?.takeIf { it.isNotBlank() }
+                ?: return@withContext false to "$providerName sign-in returned no CityCare session."
+            val user = response.optJSONObject("data")
+                ?: return@withContext false to "$providerName sign-in returned incomplete account data."
+
+            authToken = token
             setCurrentUser(
-                name = user.optString("fullName", "Facebook Resident"),
+                name = user.optString("fullName", "$providerName Resident"),
                 email = user.optString("email", ""),
                 phone = user.optString("phoneNumber", ""),
                 barangay = user.optString("barangay", "Carmen"),
@@ -1004,10 +1002,12 @@ object CityCareApiService {
                 photoUrl = user.optString("profilePhoto").takeIf { it.isNotBlank() }
             )
             saveUserSession(context)
-            true to "Facebook sign-in successful."
+            true to "$providerName sign-in successful."
         } catch (e: Exception) {
-            e.printStackTrace()
-            false to "Could not verify your Facebook account with CityCare. Check your connection and try again."
+            authToken = null
+            false to "Could not complete $providerName sign-in: ${e.localizedMessage ?: "network error"}"
+        } finally {
+            connection.disconnect()
         }
     }
 

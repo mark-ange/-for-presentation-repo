@@ -184,26 +184,24 @@ fun CityCareLoginScreen(
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
             val account = task.getResult(ApiException::class.java)
-            val realEmail = account?.email ?: ""
-            val displayName = account?.displayName ?: account?.givenName ?: realEmail.substringBefore("@")
-            val photoUrl = account?.photoUrl?.toString()
-
-            errorMessage = null
-            isAuthenticatingSocial = true
-            coroutineScope.launch {
-                val success = CityCareApiService.loginWithGoogleSocial(
-                    email = realEmail,
-                    fullName = displayName,
-                    photoUrl = photoUrl,
-                    context = context
-                )
+            val idToken = account?.idToken
+            if (idToken.isNullOrBlank()) {
                 isAuthenticatingSocial = false
-                if (success) {
-                    onLoginSuccess()
-                } else if (!CityCareApiService.hasValidatedInternetConnection(context)) {
-                    errorMessage = "An internet connection is required to sign in. Connect and try again."
-                } else {
-                    errorMessage = "Unable to authenticate Google account ($realEmail)."
+                errorMessage = "Google did not return an ID token. Check the Web OAuth client ID configuration."
+            } else {
+                errorMessage = null
+                isAuthenticatingSocial = true
+                coroutineScope.launch {
+                    val (success, message) = CityCareApiService.loginWithGoogleSocial(
+                        idToken = idToken,
+                        context = context
+                    )
+                    isAuthenticatingSocial = false
+                    if (success) {
+                        onLoginSuccess()
+                    } else {
+                        errorMessage = message
+                    }
                 }
             }
         } catch (e: ApiException) {

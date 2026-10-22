@@ -1807,18 +1807,22 @@ fun NewWasteReportScreen(
                         )
 
                         // Save permanently to local disk storage & MongoDB database
-                        CityCareApiService.addLocalReport(context, newReport)
+                        CityCareApiService.addLocalReport(
+                            context,
+                            newReport,
+                            enqueueUpload = false
+                        )
                         coroutineScope.launch {
                             val synced = CityCareApiService.syncPendingReport(context, newReport)
                             val message = if (synced) {
                                 "Report submitted to CLENRO."
                             } else {
-                                "Report saved on this device; background upload will retry."
+                                CityCareApiService.enqueuePendingReportUpload(context)
+                                "Report saved on this device; upload will retry when internet is available."
                             }
                             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
 
-                        Toast.makeText(context, "Report saved. Connecting to CLENRO...", Toast.LENGTH_SHORT).show()
                         onSubmit(newReport)
                     },
                     modifier = Modifier

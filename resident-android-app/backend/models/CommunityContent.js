@@ -1,4 +1,32 @@
 const mongoose = require('mongoose');
+const { connection } = require('../config/reportDb');
+
+const galleryImageSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    maxlength: 110
+  },
+  mimeType: {
+    type: String,
+    required: true,
+    enum: ['image/jpeg', 'image/png', 'image/webp']
+  },
+  size: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 2 * 1024 * 1024
+  },
+  data: {
+    type: Buffer,
+    required: true,
+    select: false
+  }
+}, {
+  _id: true,
+  id: false
+});
 
 const communityContentSchema = new mongoose.Schema({
   type: {
@@ -29,23 +57,55 @@ const communityContentSchema = new mongoose.Schema({
     default: ''
   },
   images: {
-    type: [mongoose.Schema.Types.Mixed],
-    default: []
+    type: [galleryImageSchema],
+    default: [],
+    validate: {
+      validator: (images) => {
+        const totalBytes = images.reduce((sum, image) => sum + image.size, 0);
+        return images.length <= 5 && totalBytes <= 8 * 1024 * 1024;
+      },
+      message: 'Content galleries may contain at most 5 images and 8 MB total.'
+    }
+  },
+  status: {
+    type: String,
+    enum: ['draft', 'published'],
+    default: 'draft',
+    index: true
   },
   eventStartAt: {
-    type: String,
-    default: ''
+    type: Date,
+    default: null,
+    required: function () {
+      return this.type === 'event';
+    }
   },
   eventEndAt: {
-    type: String,
-    default: ''
+    type: Date,
+    default: null,
+    validate: {
+      validator: function (value) {
+        return !value || this.type !== 'event' || !this.eventStartAt || value >= this.eventStartAt;
+      },
+      message: 'Event end time must be after its start time.'
+    }
   },
   location: {
     type: String,
-    default: ''
+    default: '',
+    maxlength: 240,
+    required: function () {
+      return this.type === 'event';
+    }
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true
 });
 
-module.exports = mongoose.model('CommunityContent', communityContentSchema);
+communityContentSchema.index({ type: 1, status: 1, updatedAt: -1 });
+
+module.exports = connection.model('CommunityContent', communityContentSchema);
